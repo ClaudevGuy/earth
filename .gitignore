@@ -1,0 +1,11 @@
+node_modules
+dist
+earth-wallet
+earth-wallet.zip
+.DS_Store
+.env
+.env.local
+.netlify
+*.log
+.vite
+.earth-catalog.json

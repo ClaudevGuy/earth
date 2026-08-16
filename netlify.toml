@@ -1,0 +1,34 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/jupiter-quote"
+  to = "/.netlify/functions/jupiter-quote"
+  status = 200
+
+[[redirects]]
+  from = "/api/rpc"
+  to = "/.netlify/functions/rpc"
+  status = 200
+
+[[redirects]]
+  from = "/api/mcaps"
+  to = "/.netlify/functions/mcaps"
+  status = 200
+
+[[redirects]]
+  from = "/api/standards"
+  to = "/.netlify/functions/standards"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

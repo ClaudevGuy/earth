@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Earth Wallet Privacy Policy</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #0e0b09; color: #f8f2ea; }
+      main { max-width: 720px; margin: 0 auto; padding: 48px 24px 96px; line-height: 1.55; }
+      h1, h2 { font-family: Georgia, serif; letter-spacing: -0.03em; }
+      p, li { color: #d7cbbd; }
+      a { color: #d4e2bc; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p>Earth</p>
+      <h1>Earth Wallet privacy policy</h1>
+      <p>Last updated: 17 August 2026</p>
+      <p>
+        Earth Wallet is a browser extension. It is a local key manager for Solana and for token programs registered
+        as adapters (SPL Token, Token-2022, and custom programs including u128 amounts). It is not a custodial service
+        and it does not create accounts on an Earth server.
+      </p>
+      <h2>What is stored</h2>
+      <ul>
+        <li>An encrypted copy of your seed phrase on this Chrome profile (password-based AES-GCM). Earth cannot read it.</li>
+        <li>
+          Public wallet address, RPC URL, auto-lock setting, registered token standards, listed mints, and connected
+          site origins.
+        </li>
+        <li>An unlocked session key in Chrome session storage until you lock the wallet, the auto-lock timer fires, the OS locks, or you close the browser.</li>
+      </ul>
+      <h2>What is sent over the network</h2>
+      <ul>
+        <li>Balance and transaction requests to the Solana RPC URL you configure (default: the public Solana mainnet RPC).</li>
+        <li>Signed transactions you approve, to that same RPC.</li>
+      </ul>
+      <p>
+        The Earth website (not the wallet) can publish a token standard’s public fields — name, program ID, kind, amount
+        width, notes, optional publisher address — to the Earth catalog so other users can find it and mint on it. The
+        wallet does not upload standards; you can paste a share code locally.
+      </p>
+      <p>Earth does not run analytics, crash reporting, or advertising. Seed phrases and passwords are never uploaded.</p>
+      <h2>Connected sites</h2>
+      <p>
+        When you approve a connection, that origin may request signatures. You can forget a site in Settings. Dapp pages
+        never receive your seed or password.
+      </p>
+      <h2>Contact</h2>
+      <p>
+        Questions about this policy can be opened as an issue on the Earth repository that ships this extension.
+      </p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "earth",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "ext:build": "tsc -p tsconfig.extension.json --noEmit && node scripts/build-extension.mjs",
+    "ext:pack": "npm run ext:build && node scripts/pack-extension.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.13",
+    "@noble/hashes": "^1.8.0",
+    "@scure/bip39": "^1.6.0",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.4",
+    "buffer": "^6.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tweetnacl": "^1.0.3",
+    "uqr": "^0.1.3"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.1",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.5"
+  }
+}

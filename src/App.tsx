@@ -66,10 +66,7 @@ export default function App() {
       <header className="topbar">
         <button type="button" className="brand" onClick={() => setPage("home")}>
           <Mark size={38} />
-          <div>
-            <h1>Earth</h1>
-            <p>Solana DEX</p>
-          </div>
+          <h1>Earth</h1>
         </button>
         <nav className="nav">
           {NAV.map((item) => (

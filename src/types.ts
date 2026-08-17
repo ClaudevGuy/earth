@@ -161,7 +161,7 @@ export interface RouteQuote {
   note?: string;
 }
 
-export type Page = "dex" | "trade" | "pools" | "liquidity" | "launchpad" | "standards" | "docs";
+export type Page = "home" | "dex" | "trade" | "pools" | "liquidity" | "launchpad" | "standards" | "docs";
 
 export interface PairFocus {
   mintA?: string;

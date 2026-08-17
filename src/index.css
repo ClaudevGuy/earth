@@ -16,7 +16,8 @@
   --line-strong: rgba(240, 226, 200, 0.22);
   --danger: #e8896e;
   --glow: rgba(224, 146, 69, 0.38);
-  --panel: linear-gradient(180deg, rgba(48, 39, 32, 0.94), rgba(22, 18, 15, 0.94));
+  --glow-ocean: rgba(74, 130, 138, 0.42);
+  --panel: linear-gradient(180deg, rgba(52, 42, 34, 0.92), rgba(18, 14, 12, 0.94));
   --radius: 22px;
   --ease: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -40,9 +41,10 @@ body {
   color: var(--ink);
   font-family: Outfit, system-ui, sans-serif;
   background:
-    radial-gradient(ellipse 80% 50% at 0% -10%, rgba(74, 130, 138, 0.34), transparent 58%),
-    radial-gradient(ellipse 55% 40% at 100% 0%, rgba(224, 146, 69, 0.18), transparent 52%),
-    radial-gradient(ellipse 60% 45% at 70% 110%, rgba(138, 175, 132, 0.14), transparent 55%),
+    radial-gradient(ellipse 72% 50% at 8% -12%, rgba(74, 130, 138, 0.4), transparent 58%),
+    radial-gradient(ellipse 48% 38% at 98% 0%, rgba(224, 146, 69, 0.22), transparent 52%),
+    radial-gradient(ellipse 58% 42% at 72% 112%, rgba(138, 175, 132, 0.16), transparent 54%),
+    radial-gradient(ellipse 36% 24% at 46% 38%, rgba(212, 104, 72, 0.07), transparent 70%),
     var(--soil);
 }
 
@@ -51,7 +53,8 @@ body::before {
   pointer-events: none;
   position: fixed;
   inset: 0;
-  opacity: 0.18;
+  z-index: 0;
+  opacity: 0.22;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -59,17 +62,52 @@ body::after {
   content: "";
   pointer-events: none;
   position: fixed;
-  width: min(640px, 80vw);
-  height: min(640px, 80vw);
-  right: -12%;
-  top: -18%;
+  width: min(720px, 88vw);
+  height: min(720px, 88vw);
+  right: -16%;
+  top: -22%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 38% 36%, rgba(138, 175, 132, 0.28), transparent 36%),
-    radial-gradient(circle at 62% 58%, rgba(74, 130, 138, 0.32), transparent 48%),
-    radial-gradient(circle at 50% 50%, rgba(224, 146, 69, 0.1), transparent 62%);
-  filter: blur(28px);
-  opacity: 0.85;
+    radial-gradient(circle at 38% 36%, rgba(138, 175, 132, 0.3), transparent 36%),
+    radial-gradient(circle at 62% 58%, rgba(74, 130, 138, 0.36), transparent 48%),
+    radial-gradient(circle at 50% 50%, rgba(224, 146, 69, 0.14), transparent 62%);
+  filter: blur(32px);
+  opacity: 0.9;
+}
+
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.atmosphere-ridges {
+  width: 100%;
+  height: 100%;
+  opacity: 0.7;
+}
+
+.atmosphere-ridges .ridge {
+  stroke-width: 1.15;
+}
+
+.atmosphere-ridges .ridge.ochre {
+  stroke: rgba(224, 146, 69, 0.16);
+}
+
+.atmosphere-ridges .ridge.ocean {
+  stroke: rgba(74, 130, 138, 0.18);
+}
+
+.atmosphere-ridges .ridge.moss {
+  stroke: rgba(138, 175, 132, 0.13);
+}
+
+.atmosphere-meridian {
+  stroke: rgba(224, 146, 69, 0.11);
+  stroke-width: 0.85;
 }
 
 ::selection {
@@ -139,9 +177,8 @@ a {
   padding: 20px 20px 88px;
 }
 
-.shell.terminal-shell {
-  max-width: 1520px;
-  padding-bottom: 48px;
+.shell.home-shell {
+  max-width: 1180px;
 }
 
 .shell.terminal-shell .topbar {
@@ -164,9 +201,12 @@ a {
   padding: 10px 12px 12px 14px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: rgba(14, 11, 9, 0.72);
+  background: rgba(14, 11, 9, 0.78);
   backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(240, 226, 200, 0.12),
+    inset 0 -1px 0 rgba(74, 130, 138, 0.08);
   position: sticky;
   top: 12px;
   z-index: 12;
@@ -182,11 +222,24 @@ a {
   grid-area: brand;
 }
 
+button.brand {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+button.brand:hover h1 {
+  color: var(--sand);
+}
+
 .brand-mark {
   flex-shrink: 0;
   display: block;
   object-fit: contain;
-  filter: drop-shadow(0 0 12px rgba(74, 130, 138, 0.45));
+  filter: drop-shadow(0 0 14px rgba(74, 130, 138, 0.55));
 }
 
 .brand h1 {
@@ -332,6 +385,17 @@ a.ghost {
   text-transform: uppercase;
 }
 
+.kicker::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 1px;
+  margin-right: 8px;
+  vertical-align: middle;
+  background: currentColor;
+  opacity: 0.7;
+}
+
 .hero h2 {
   margin: 0 0 12px;
   font-family: Fraunces, Georgia, serif;
@@ -339,6 +403,7 @@ a.ghost {
   font-weight: 560;
   letter-spacing: -0.045em;
   line-height: 1.02;
+  text-shadow: 0 0 36px rgba(74, 130, 138, 0.14);
 }
 
 .hero p,
@@ -360,7 +425,9 @@ a.ghost {
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(24, 20, 16, 0.62);
+  background:
+    radial-gradient(ellipse 80% 120% at 100% 0%, rgba(74, 130, 138, 0.1), transparent 46%),
+    rgba(24, 20, 16, 0.62);
   backdrop-filter: blur(10px);
   position: relative;
   overflow: hidden;
@@ -408,7 +475,10 @@ a.ghost {
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--panel);
+  background:
+    linear-gradient(rgba(224, 146, 69, 0.55), rgba(224, 146, 69, 0.55)) 16px 16px / 13px 1px no-repeat,
+    linear-gradient(rgba(224, 146, 69, 0.55), rgba(224, 146, 69, 0.55)) 16px 16px / 1px 13px no-repeat,
+    var(--panel);
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(240, 226, 200, 0.08);
@@ -784,7 +854,8 @@ a.ghost {
 .footer {
   margin-top: 36px;
   padding-top: 20px;
-  border-top: 1px solid var(--line);
+  border-top: 0;
+  background: linear-gradient(90deg, transparent, rgba(224, 146, 69, 0.35), rgba(74, 130, 138, 0.28), transparent) 0 0 / 100% 1px no-repeat;
   color: var(--mute);
   font-size: 13px;
   line-height: 1.55;
@@ -1116,7 +1187,9 @@ a.ghost {
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid var(--line);
-  background: rgba(24, 20, 16, 0.55);
+  background:
+    linear-gradient(rgba(224, 146, 69, 0.4), rgba(224, 146, 69, 0.4)) 10px 10px / 8px 1px no-repeat,
+    rgba(24, 20, 16, 0.55);
   text-align: left;
   color: var(--ink);
 }
@@ -1163,7 +1236,9 @@ a.ghost {
   padding: 16px;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background:
+    radial-gradient(ellipse 80% 70% at 100% 0%, rgba(224, 146, 69, 0.1), transparent 50%),
+    var(--panel);
   text-align: left;
   color: inherit;
 }
@@ -1449,6 +1524,9 @@ a.ghost {
 .chart-panel {
   padding: 8px 8px 4px;
   overflow: hidden;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 0%, rgba(74, 130, 138, 0.1), transparent 55%),
+    var(--panel);
 }
 
 .tf-row {
@@ -1661,21 +1739,277 @@ a.ghost {
   align-items: center;
 }
 
-.earth-spin {
+.earth-stage {
+  --earth-size: 200px;
   flex-shrink: 0;
   position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--earth-size) * 1.32);
+  height: calc(var(--earth-size) * 1.32);
+}
+
+.earth-stage-bloom {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 38%, rgba(228, 244, 241, 0.16), transparent 28%),
+    radial-gradient(circle at 50% 50%, var(--glow-ocean), transparent 58%),
+    radial-gradient(circle at 58% 62%, rgba(224, 146, 69, 0.28), transparent 70%);
+  filter: blur(18px);
+  z-index: 0;
+  animation: earth-bloom 7s ease-in-out infinite;
+}
+
+.earth-stage-well {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 6%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(14, 11, 9, 0.45), transparent 68%);
+  filter: blur(10px);
+  z-index: 0;
+}
+
+.earth-stage-rings {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.earth-ring-outer {
+  fill: none;
+  stroke: rgba(224, 146, 69, 0.55);
+  stroke-width: 0.45;
+}
+
+.earth-ring-equator {
+  fill: none;
+  stroke: rgba(74, 130, 138, 0.45);
+  stroke-width: 0.4;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: earth-equator 18s linear infinite;
 }
 
 .earth-spin-loop,
 .earth-spin-static {
+  position: relative;
+  z-index: 2;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: var(--earth-size);
+  height: var(--earth-size);
   object-fit: contain;
+  background: transparent;
+  filter: drop-shadow(0 10px 28px rgba(14, 11, 9, 0.45));
 }
 
 .earth-spin-static {
   display: none;
+}
+
+.home {
+  display: grid;
+  gap: 28px;
+  animation: fade-in 220ms ease;
+}
+
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto;
+  gap: 28px;
+  align-items: center;
+}
+
+.home-hero h2 {
+  margin: 0 0 14px;
+  font-family: Fraunces, Georgia, serif;
+  font-size: clamp(34px, 5.4vw, 58px);
+  font-weight: 560;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  text-shadow: 0 0 42px rgba(74, 130, 138, 0.18);
+}
+
+.home-hero .lede {
+  max-width: 58ch;
+}
+
+.home-hero .earth-stage {
+  --earth-size: 280px;
+  justify-self: end;
+}
+
+.home-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.home-thesis {
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(90deg, rgba(74, 130, 138, 0.2), rgba(224, 146, 69, 0.1) 55%, transparent),
+    rgba(24, 20, 16, 0.55);
+  box-shadow: inset 3px 0 0 var(--ochre);
+}
+
+.home-thesis p {
+  margin: 0;
+  max-width: 78ch;
+  color: var(--sand);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.home-paths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.home-path,
+.home-factory {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.home-path {
+  padding: 22px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(240, 226, 200, 0.08);
+}
+
+.home-path:nth-child(1) {
+  background:
+    radial-gradient(ellipse 70% 80% at 100% 0%, rgba(224, 146, 69, 0.14), transparent 48%),
+    var(--panel);
+}
+
+.home-path:nth-child(2) {
+  background:
+    radial-gradient(ellipse 70% 80% at 100% 0%, rgba(74, 130, 138, 0.16), transparent 48%),
+    var(--panel);
+}
+
+.home-path:nth-child(3) {
+  background:
+    radial-gradient(ellipse 70% 80% at 100% 0%, rgba(138, 175, 132, 0.14), transparent 48%),
+    var(--panel);
+}
+
+.home-path:nth-child(4) {
+  background:
+    radial-gradient(ellipse 70% 80% at 100% 0%, rgba(212, 104, 72, 0.12), transparent 48%),
+    var(--panel);
+}
+
+.home-path-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.home-path .kicker {
+  margin: 0;
+}
+
+.path-motif {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--ochre);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+.home-path:nth-child(2) .path-motif {
+  stroke: var(--ocean);
+}
+
+.home-path:nth-child(3) .path-motif {
+  stroke: var(--moss);
+}
+
+.home-path:nth-child(4) .path-motif {
+  stroke: var(--terracotta);
+}
+
+.home-path strong {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 22px;
+  font-weight: 560;
+  letter-spacing: -0.03em;
+}
+
+.home-path span:last-child {
+  color: var(--mute);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.home-path:hover,
+.home-factory:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.home-path:hover .path-motif {
+  opacity: 1;
+}
+
+.home-factories .panel-head {
+  margin-bottom: 14px;
+}
+
+.home-factory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-factory {
+  padding: 16px 18px;
+  gap: 6px;
+  background:
+    linear-gradient(rgba(74, 130, 138, 0.35), rgba(74, 130, 138, 0.35)) 14px 14px / 10px 1px no-repeat,
+    linear-gradient(rgba(74, 130, 138, 0.35), rgba(74, 130, 138, 0.35)) 14px 14px / 1px 10px no-repeat,
+    var(--panel);
+}
+
+.home-factory strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.home-factory span:last-child {
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .docs-layout {
@@ -1688,6 +2022,54 @@ a.ghost {
 .docs-toc {
   position: sticky;
   top: 92px;
+}
+
+.docs-audience {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(14, 11, 9, 0.45);
+}
+
+.docs-audience button {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.docs-audience button.active {
+  background: var(--sand);
+  color: var(--soil);
+}
+
+.docs-track-lede {
+  margin: 0 0 22px;
+  color: var(--sand);
+  font-size: 15px;
+}
+
+.docs-code {
+  margin: 12px 0 16px;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 6, 5, 0.55);
+  color: var(--leaf);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .docs-toc-list {
@@ -1803,7 +2185,32 @@ a.ghost {
   }
 }
 
+@keyframes earth-equator {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes earth-bloom {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.07);
+  }
+}
+
 @media (max-width: 1100px) {
+  .home-factory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .docs-layout {
     grid-template-columns: 1fr;
   }
@@ -1829,6 +2236,9 @@ a.ghost {
 
 @media (max-width: 860px) {
   .hero,
+  .home-hero,
+  .home-paths,
+  .home-factory-grid,
   .swap-grid,
   .form-grid,
   .var-grid,
@@ -1867,12 +2277,18 @@ a.ghost {
     font-size: 22px;
   }
 
-  .hero h2 {
+  .hero h2,
+  .home-hero h2 {
     font-size: 32px;
   }
 
-  .earth-spin {
+  .earth-stage {
     align-self: center;
+    justify-self: center;
+  }
+
+  .home-hero .earth-stage {
+    --earth-size: 200px;
   }
 }
 
@@ -1894,5 +2310,14 @@ a.ghost {
 
   .earth-spin-static {
     display: block;
+  }
+
+  .earth-ring-equator,
+  .earth-stage-bloom {
+    animation: none;
+  }
+
+  .atmosphere-ridges {
+    opacity: 0.4;
   }
 }

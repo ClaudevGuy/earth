@@ -9,8 +9,10 @@ import { LiquidityView } from "./components/LiquidityView.tsx";
 import { LaunchpadView } from "./components/LaunchpadView.tsx";
 import { StandardsView } from "./components/StandardsView.tsx";
 import { DocsView } from "./components/DocsView.tsx";
+import { HomeView } from "./components/HomeView.tsx";
 import { shortAddress } from "./lib/format.ts";
 import { EarthSpin } from "./components/EarthSpin.tsx";
+import { Atmosphere } from "./components/Motifs.tsx";
 import { Mark } from "./components/Mark.tsx";
 
 const NAV: { id: Page; label: string }[] = [
@@ -23,7 +25,7 @@ const NAV: { id: Page; label: string }[] = [
   { id: "docs", label: "Docs" },
 ];
 
-const PAGES = new Set(NAV.map((item) => item.id));
+const PAGES = new Set<Page>(["home", ...NAV.map((item) => item.id)]);
 
 function inboundStandards() {
   const q = new URLSearchParams(window.location.search);
@@ -46,10 +48,11 @@ export default function App() {
   const [page, setPage] = useState<Page>(() => {
     if (inbound.page) return inbound.page;
     if (inbound.adopt || inbound.std) return "standards";
-    return "dex";
+    return "home";
   });
   const [focus, setFocus] = useState<PairFocus>();
   const [docsChapter, setDocsChapter] = useState<string>();
+  const [stdFocus, setStdFocus] = useState(inbound.std);
 
   function openPair(next: Page, nextFocus: PairFocus) {
     setFocus(nextFocus);
@@ -57,15 +60,17 @@ export default function App() {
   }
 
   return (
-    <div className={`shell${page === "trade" ? " terminal-shell" : ""}`}>
+    <>
+      <Atmosphere />
+      <div className={`shell${page === "trade" ? " terminal-shell" : ""}${page === "home" ? " home-shell" : ""}`}>
       <header className="topbar">
-        <div className="brand">
+        <button type="button" className="brand" onClick={() => setPage("home")}>
           <Mark size={38} />
           <div>
             <h1>Earth</h1>
             <p>Solana DEX</p>
           </div>
-        </div>
+        </button>
         <nav className="nav">
           {NAV.map((item) => (
             <button
@@ -82,10 +87,6 @@ export default function App() {
           ))}
         </nav>
         <div className="wallet-cluster">
-          <span className={`status-pill${feed.status === "local" ? " warn" : ""}`}>
-            <span className="status-dot" />
-            indexer {feed.status}
-          </span>
           {earth.wallet ? (
             <>
               <span className="wallet-chip mono" title="Earth Wallet">
@@ -115,14 +116,14 @@ export default function App() {
         </div>
       </header>
 
-      {page === "docs" ? (
+      {page === "home" ? null : page === "docs" ? (
         <section className="hero docs-hero">
           <div>
-            <p className="kicker">User guide</p>
-            <h2>How Earth works.</h2>
+            <p className="kicker">Docs</p>
+            <h2>For people who use Earth. For people who build on it.</h2>
             <p className="lede">
-              Create a token standard: upload the contract source (it is public), burn $1,000 of $EARTH, Earth deploys
-              it. Then create a contract, open a pool, and trade with Earth Wallet.
+              Users: why custom token standards matter, and how to launch, swap, and hold them. Developers: adapters,
+              APIs, wallet provider, and the math the venue actually runs.
             </p>
           </div>
           <EarthSpin />
@@ -249,6 +250,15 @@ export default function App() {
         </section>
       ) : null}
 
+      {page === "home" ? (
+        <HomeView
+          onEnter={setPage}
+          onOpenStandard={(id) => {
+            setStdFocus(id);
+            setPage("standards");
+          }}
+        />
+      ) : null}
       {page === "dex" ? (
         <SwapView
           earth={earth}
@@ -271,7 +281,7 @@ export default function App() {
       {page === "liquidity" ? <LiquidityView earth={earth} focus={focus} /> : null}
       {page === "launchpad" ? <LaunchpadView earth={earth} onOpenPair={openPair} /> : null}
       {page === "standards" ? (
-        <StandardsView earth={earth} onOpenPair={openPair} focusId={inbound.std} adoptCode={inbound.adopt} />
+        <StandardsView earth={earth} onOpenPair={openPair} focusId={stdFocus} adoptCode={inbound.adopt} />
       ) : null}
       {page === "docs" ? <DocsView onOpen={setPage} chapter={docsChapter} /> : null}
 
@@ -286,14 +296,17 @@ export default function App() {
         </p>
       ) : null}
 
-      <footer className="footer">
-        Earth is the DEX. Swap listed tokens, chart them on Trade, and launch coins that graduate into Earth pools.
-        Factory contracts mint on-chain.{" "}
-        <button type="button" className="linkish" onClick={() => setPage("docs")}>
-          Read the user guide
-        </button>
-        .
-      </footer>
-    </div>
+      {page === "home" ? null : (
+        <footer className="footer">
+          Earth is the DEX. Swap listed tokens, chart them on Trade, and launch coins that graduate into Earth pools.
+          Factory contracts mint on-chain.{" "}
+          <button type="button" className="linkish" onClick={() => setPage("docs")}>
+            Read the docs
+          </button>
+          .
+        </footer>
+      )}
+      </div>
+    </>
   );
 }

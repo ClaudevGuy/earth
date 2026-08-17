@@ -3,6 +3,7 @@ export function makeId(prefix: string): string {
   return `${prefix}-${rand}`;
 }
 
+/** Earth assigns this until the real program is deployed on chain. Users never paste a program ID. */
 export function previewProgramId(name: string): string {
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "standard";
   return `earthprog:${slug}:${makeId("p")}`;
@@ -10,6 +11,19 @@ export function previewProgramId(name: string): string {
 
 export function previewMint(symbol: string): string {
   return `earthmint:${symbol.trim().toLowerCase()}:${makeId("m")}`;
+}
+
+export function isOnChainProgramId(programId: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(programId);
+}
+
+/** True for official SPL / Token-2022 and any live address Earth has already deployed. */
+export function isLiveEarthProgram(programId: string): boolean {
+  if (!isOnChainProgramId(programId)) return false;
+  if (programId.startsWith("earthprog:")) return false;
+  if (programId.includes("Preview")) return false;
+  if (/^Earth[A-Z]/.test(programId)) return false;
+  return true;
 }
 
 export function validateTicker(value: string): string | undefined {

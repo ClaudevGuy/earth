@@ -6,40 +6,16 @@ import { TradeView } from "./components/TradeView.tsx";
 import { SwapView } from "./components/SwapView.tsx";
 import { PoolsView } from "./components/PoolsView.tsx";
 import { LiquidityView } from "./components/LiquidityView.tsx";
+import { LaunchpadView } from "./components/LaunchpadView.tsx";
 import { StandardsView } from "./components/StandardsView.tsx";
 import { DocsView } from "./components/DocsView.tsx";
 import { shortAddress } from "./lib/format.ts";
-
-function Mark() {
-  return (
-    <svg className="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <defs>
-        <radialGradient id="earthFill" cx="34%" cy="30%" r="72%">
-          <stop offset="0%" stopColor="#9bb892" />
-          <stop offset="42%" stopColor="#4a828a" />
-          <stop offset="100%" stopColor="#1c3a3e" />
-        </radialGradient>
-      </defs>
-      <circle cx="20" cy="20" r="16" fill="url(#earthFill)" />
-      <circle cx="20" cy="20" r="16.6" stroke="#e09245" strokeWidth="1.15" opacity="0.9" />
-      <ellipse cx="20" cy="20" rx="6.4" ry="16" stroke="#f0e2c8" strokeWidth="0.7" opacity="0.28" />
-      <path
-        d="M4 20h32M20 4c5.6 6.1 8.2 12 8.2 16S25.6 29.9 20 36c-5.6-6.1-8.2-12-8.2-16S14.4 10.1 20 4z"
-        stroke="#e4f4f1"
-        strokeWidth="0.75"
-        opacity="0.4"
-      />
-      <path
-        d="M11.5 15.2c2.2-1.4 4.6-.2 5.8 1.6 1.4 1.8 3.4.8 4.6-1 1.4 2.2 3.8 3.2 2.2 5.2-2.2 1.2-5.2.4-6.4-1.2-1.8-1.4-4.2.1-5.4-1.6.8-1.2 1.2-2.4-.8-3z"
-        fill="#d4e2bc"
-        opacity="0.42"
-      />
-    </svg>
-  );
-}
+import { EarthSpin } from "./components/EarthSpin.tsx";
+import { Mark } from "./components/Mark.tsx";
 
 const NAV: { id: Page; label: string }[] = [
   { id: "trade", label: "Trade" },
+  { id: "launchpad", label: "Launchpad" },
   { id: "swap", label: "Swap" },
   { id: "pools", label: "Pools" },
   { id: "liquidity", label: "Liquidity" },
@@ -47,11 +23,14 @@ const NAV: { id: Page; label: string }[] = [
   { id: "docs", label: "Docs" },
 ];
 
+const PAGES = new Set(NAV.map((item) => item.id));
+
 function inboundStandards() {
   const q = new URLSearchParams(window.location.search);
   const adopt = q.get("adopt") ?? undefined;
   const std = q.get("std") ?? undefined;
-  const page = q.get("page");
+  const pageParam = q.get("page");
+  const page = pageParam && PAGES.has(pageParam as Page) ? (pageParam as Page) : undefined;
   if (adopt || std || page) {
     const url = new URL(window.location.href);
     window.history.replaceState({}, "", `${url.pathname}${url.hash}`);
@@ -63,9 +42,11 @@ export default function App() {
   const inbound = useMemo(() => inboundStandards(), []);
   const earth = useEarth();
   const feed = useIndexer(earth.tokens, earth.pools);
-  const [page, setPage] = useState<Page>(
-    inbound.page === "standards" || inbound.adopt || inbound.std ? "standards" : "trade",
-  );
+  const [page, setPage] = useState<Page>(() => {
+    if (inbound.page) return inbound.page;
+    if (inbound.adopt || inbound.std) return "standards";
+    return "trade";
+  });
   const [focus, setFocus] = useState<PairFocus>();
   const [docsChapter, setDocsChapter] = useState<string>();
 
@@ -78,7 +59,7 @@ export default function App() {
     <div className={`shell${page === "trade" ? " terminal-shell" : ""}`}>
       <header className="topbar">
         <div className="brand">
-          <Mark />
+          <Mark size={38} />
           <div>
             <h1>Earth</h1>
             <p>Solana market</p>
@@ -139,19 +120,51 @@ export default function App() {
             <p className="kicker">User guide</p>
             <h2>How Earth works.</h2>
             <p className="lede">
-              Create a token standard, publish it so others can find it, list mints, open a pool, and use Earth Wallet
-              — including what is still protocol preview.
+              Create a token standard: upload the contract source (it is public), burn $1,000 of $EARTH, Earth deploys
+              it. Then create a contract, open a pool, and use Earth Wallet — including what is still protocol preview.
             </p>
+          </div>
+          <EarthSpin />
+        </section>
+      ) : page === "launchpad" ? (
+        <section className="hero">
+          <div>
+            <p className="kicker">Launchpad</p>
+            <h2>Create a coin. Trade the curve. Graduate to an Earth pool.</h2>
+            <p className="lede">
+              Pick a live token standard, set name, ticker, logo, description, and socials. Earth seeds virtual SOL
+              liquidity. When the raise fills, remaining tokens and SOL lock into an Earth CPMM pool.
+            </p>
+          </div>
+          <div className="stat-row">
+            <div className="stat">
+              <span>On the curve</span>
+              <strong>{earth.launches.filter((c) => !c.graduated).length}</strong>
+            </div>
+            <div className="stat">
+              <span>Graduated</span>
+              <strong>{earth.launches.filter((c) => c.graduated).length}</strong>
+            </div>
+            <div className="stat">
+              <span>Standards</span>
+              <strong>{earth.standards.length}</strong>
+            </div>
+            <div className="stat">
+              <span>Listed tokens</span>
+              <strong>{earth.tokens.length}</strong>
+            </div>
           </div>
         </section>
       ) : page === "standards" ? (
         <section className="hero">
           <div>
             <p className="kicker">Public registry</p>
-            <h2>Make a standard. Let others mint on it.</h2>
+            <h2>Create a contract. Or burn $EARTH for a new standard.</h2>
             <p className="lede">
-              Publish a token program as an adapter. Anyone can find it here and list their own ticker — including u128
-              programs SPL venues reject. SPL and Token-2022 stay native.
+              For an AI-agent token: Standards → Create a contract → click Mandate (TSxxx5). That is a factory contract,
+              not a new standard, and not Launchpad. There is no Launch curve factory. The other factories are memecoin,
+              reflect/burn, confidential ZK ElGamal, and vested lock. Want a fair launch with virtual liquidity? Use
+              Launchpad. Want your own program? Create a standard, upload source, burn $1,000 of $EARTH.
             </p>
           </div>
           <div className="stat-row">
@@ -179,9 +192,9 @@ export default function App() {
             <p className="kicker">AMM · Aggregator · Adapters</p>
             <h2>One ground for every Solana standard.</h2>
             <p className="lede">
-              Register your own token standard, list a mint, and create a pool — including u128 adapters that SPL venues
-              reject. SPL and Token-2022 are native. Jupiter is an optional extra venue for SPL pairs. Full walkthroughs
-              live under Docs.
+              Create a contract, or burn $1,000 of $EARTH for a new standard Earth deploys for you — including u128
+              adapters that SPL venues reject. SPL and Token-2022 are native. Jupiter is an optional extra venue for SPL
+              pairs. Full walkthroughs live under Docs.
             </p>
           </div>
           <div className="stat-row">
@@ -198,7 +211,7 @@ export default function App() {
               <strong>{earth.tokens.length}</strong>
             </div>
             <div className="stat">
-              <span>Indexed mints</span>
+              <span>Indexed contracts</span>
               <strong>{feed.markets.size}</strong>
             </div>
           </div>
@@ -211,6 +224,7 @@ export default function App() {
       {page === "swap" ? <SwapView earth={earth} focus={focus} feed={feed} /> : null}
       {page === "pools" ? <PoolsView earth={earth} feed={feed} onOpenPair={(next) => openPair("trade", next)} /> : null}
       {page === "liquidity" ? <LiquidityView earth={earth} focus={focus} /> : null}
+      {page === "launchpad" ? <LaunchpadView earth={earth} onOpenPair={openPair} /> : null}
       {page === "standards" ? (
         <StandardsView earth={earth} onOpenPair={openPair} focusId={inbound.std} adoptCode={inbound.adopt} />
       ) : null}
@@ -231,7 +245,7 @@ export default function App() {
         Netlify hosts the app. Earth AMM math runs in the client as protocol preview. The Trade terminal charts Earth
         pool series, shows AMM depth, and fills listed pairs on Earth CPMM / Stable / multi-hop routes. Deploying the
         matching on-chain program is a later step. Published standards live in the Earth catalog so other users can
-        find them and mint their own tokens. The indexer prices pools from reserves and optional Pump.fun mcaps.{" "}
+        find them and mint their own tokens. The indexer prices pools from reserves and optional external market caps.{" "}
         <button type="button" className="linkish" onClick={() => setPage("docs")}>
           Read the user guide
         </button>

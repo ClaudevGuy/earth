@@ -6,6 +6,12 @@ export function shortAddress(value: string, size = 4): string {
   return `${value.slice(0, size)}…${value.slice(-size)}`;
 }
 
+export function splitProtocolFee(amount: bigint, bps: number): { net: bigint; fee: bigint } {
+  if (amount <= 0n || bps <= 0) return { net: amount, fee: 0n };
+  const fee = (amount * BigInt(bps)) / 10_000n;
+  return { net: amount - fee, fee };
+}
+
 export function parseAmount(raw: string, decimals: number): bigint {
   const trimmed = raw.trim();
   if (!trimmed || trimmed === ".") return 0n;

@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0E0B09" />
     <title>Earth Wallet Privacy Policy</title>
     <style>
       body { margin: 0; font-family: system-ui, sans-serif; background: #0e0b09; color: #f8f2ea; }
@@ -14,7 +17,10 @@
   </head>
   <body>
     <main>
-      <p>Earth</p>
+      <p>
+        <img src="/brand/earth-48-transparent.png" width="48" height="48" alt="" style="display:block;margin:0 0 12px" />
+        Earth
+      </p>
       <h1>Earth Wallet privacy policy</h1>
       <p>Last updated: 17 August 2026</p>
       <p>
@@ -26,7 +32,7 @@
       <ul>
         <li>An encrypted copy of your seed phrase on this Chrome profile (password-based AES-GCM). Earth cannot read it.</li>
         <li>
-          Public wallet address, RPC URL, auto-lock setting, registered token standards, listed mints, and connected
+          Public wallet address, RPC URL, auto-lock setting, adopted token standards, listed contracts, and connected
           site origins.
         </li>
         <li>An unlocked session key in Chrome session storage until you lock the wallet, the auto-lock timer fires, the OS locks, or you close the browser.</li>
@@ -37,9 +43,11 @@
         <li>Signed transactions you approve, to that same RPC.</li>
       </ul>
       <p>
-        The Earth website (not the wallet) can publish a token standard’s public fields — name, program ID, kind, amount
-        width, notes, optional publisher address — to the Earth catalog so other users can find it and mint on it. The
-        wallet does not upload standards; you can paste a share code locally.
+        The Earth website (not the wallet) can publish a token standard’s public fields — name, Earth-assigned program,
+        kind, amount width, notes, the uploaded contract source, optional publisher address — to the Earth catalog so
+        other users can find it, read the code, and create a contract on it. Listing your own standard burns $1,000 of
+        $EARTH on the site; Earth deploys the program. The wallet does not upload standards; you can paste a share code
+        locally.
       </p>
       <p>Earth does not run analytics, crash reporting, or advertising. Seed phrases and passwords are never uploaded.</p>
       <h2>Connected sites</h2>

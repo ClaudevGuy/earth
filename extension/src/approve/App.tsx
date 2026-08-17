@@ -88,9 +88,10 @@ export function ApproveApp() {
     <div className="shell">
       <div className="center" style={{ marginBottom: 12 }}>
         <div className="logo-wrap" style={{ width: 56, height: 56, marginBottom: 10 }}>
-          <Mark size={34} />
+          <Mark size={32} />
         </div>
-        <h1 className="welcome" style={{ fontSize: 20 }}>
+        <p className="kicker">Approve</p>
+        <h1 className="welcome" style={{ fontSize: 22 }}>
           {title}
         </h1>
       </div>

@@ -1,24 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AmountWidth, PublicWalletState, StandardKind, TokenBalance } from "../shared/types";
-import { decodeShareCode } from "../shared/catalog";
+import type { PublicWalletState, TokenBalance } from "../shared/types";
 import { reviewChecks } from "../shared/adapters";
 import { CLIPBOARD_CLEAR_MS, MIN_PASSWORD, WSOL } from "../shared/constants";
 import { formatAmount, shortAddress } from "../shared/format";
 import type { CreateWalletPreview } from "../shared/messages";
 import { passwordScore } from "../shared/security";
 import { Mark, TokenAvatar } from "./brand";
-import {
-  IconBack,
-  IconClock,
-  IconCopy,
-  IconEye,
-  IconGear,
-  IconGrid,
-  IconHome,
-  IconLock,
-  IconReceive,
-  IconSend,
-} from "./icons";
+import { IconBack, IconEye, IconLock } from "./icons";
 import { AddressQr } from "./qr";
 import { call } from "./rpc";
 
@@ -36,6 +24,7 @@ type View =
   | "receive"
   | "activity"
   | "standards"
+  | "wallets"
   | "settings";
 
 function PasswordField({
@@ -88,17 +77,11 @@ export function App() {
   const [amount, setAmount] = useState("");
   const [toast, setToast] = useState<string>();
   const [rpcUrl, setRpcUrl] = useState("");
+  const [catalogUrl, setCatalogUrl] = useState("");
   const [autoLock, setAutoLock] = useState("15");
-  const [stdName, setStdName] = useState("");
-  const [stdProgram, setStdProgram] = useState("");
-  const [stdKind, setStdKind] = useState<StandardKind>("custom");
-  const [stdWidth, setStdWidth] = useState<AmountWidth>("u128");
-  const [tokSymbol, setTokSymbol] = useState("");
-  const [tokName, setTokName] = useState("");
-  const [tokMint, setTokMint] = useState("");
-  const [tokDecimals, setTokDecimals] = useState("9");
-  const [tokStandard, setTokStandard] = useState("spl-token");
-  const [shareCode, setShareCode] = useState("");
+  const [standardId, setStandardId] = useState("");
+  const [importMnemonic, setImportMnemonic] = useState("");
+  const [homeTab, setHomeTab] = useState<"tokens" | "collectibles">("tokens");
   const [exportPw, setExportPw] = useState("");
   const [exported, setExported] = useState<string>();
   const [exportReveal, setExportReveal] = useState(false);
@@ -109,6 +92,7 @@ export function App() {
     const fresh = await call<PublicWalletState>({ type: "GET_STATE" });
     setState(fresh);
     setRpcUrl(fresh.rpcUrl);
+    setCatalogUrl(fresh.catalogUrl ?? "");
     setAutoLock(String(fresh.autoLockMinutes));
     if (next) {
       setView(next);
@@ -131,6 +115,13 @@ export function App() {
   }, [state?.unlocked]);
 
   useEffect(() => {
+    if (!state?.unlocked) return;
+    void call<PublicWalletState>({ type: "REFRESH" })
+      .then((fresh) => setState(fresh))
+      .catch(() => undefined);
+  }, [state?.unlocked]);
+
+  useEffect(() => {
     void fetch(`https://lite-api.jup.ag/price/v2?ids=${WSOL}`)
       .then((res) => res.json())
       .then((json: { data?: Record<string, { price?: string | number }> }) => {
@@ -140,9 +131,9 @@ export function App() {
       .catch(() => undefined);
   }, []);
 
-  const sol = state?.balances.find((b) => b.nativeSol);
+  const sol = state?.balances?.find((b) => b.nativeSol);
   const listed = useMemo(() => {
-    if (!state) return [];
+    if (!state?.balances) return [];
     return [...state.balances].sort((a, b) => {
       if (a.nativeSol) return -1;
       if (b.nativeSol) return 1;
@@ -156,7 +147,7 @@ export function App() {
     if (!state) return undefined;
     let total = 0;
     let any = false;
-    for (const token of state.balances) {
+    for (const token of state.balances ?? []) {
       const ui = Number(formatAmount(BigInt(token.amount), token.decimals, 8));
       if (token.nativeSol && solUsd) {
         total += ui * solUsd;
@@ -199,15 +190,16 @@ export function App() {
       <div className="shell locked">
         <div className="center">
           <div className="logo-wrap">
-            <Mark size={44} />
+            <Mark size={48} />
           </div>
-          <p className="lede">Loading…</p>
+          <p className="lede">{error ? "Could not open wallet" : "Loading…"}</p>
+          {error ? <p className="notice alert">{error}</p> : null}
         </div>
       </div>
     );
   }
 
-  const unlockedNav = state.unlocked && ["home", "send", "review", "receive", "activity", "standards", "settings"].includes(view);
+  const unlockedNav = state.unlocked && ["home", "send", "review", "receive", "activity", "standards", "wallets", "settings"].includes(view);
   const strength = passwordScore(password);
 
   return (
@@ -218,10 +210,11 @@ export function App() {
       {view === "welcome" ? (
         <div className="center stack">
           <div className="logo-wrap">
-            <Mark size={44} />
+            <Mark size={48} />
           </div>
-          <h1 className="welcome">Welcome to Earth</h1>
-          <p className="lede">A non-custodial wallet for every Solana token standard — including adapters Phantom still ignores.</p>
+          <p className="kicker">Wallet</p>
+          <h1 className="welcome">Earth</h1>
+          <p className="lede">A non-custodial wallet for every Solana token standard — including custom adapters.</p>
           <button
             type="button"
             className="primary"
@@ -364,7 +357,7 @@ export function App() {
             </button>
             <h2>Import wallet</h2>
           </div>
-          <p className="lede">Enter your 12 or 24 word secret phrase. It stays on this device.</p>
+          <p className="lede">Paste the 12 or 24 word secret phrase. Not the wallet address.</p>
           <label>
             Secret recovery phrase
             <textarea rows={4} value={mnemonic} autoComplete="off" autoCorrect="off" spellCheck={false} onChange={(e) => setMnemonic(e.target.value)} />
@@ -394,8 +387,9 @@ export function App() {
       {view === "unlock" ? (
         <div className="center stack">
           <div className="logo-wrap">
-            <Mark size={44} />
+            <Mark size={48} />
           </div>
+          <p className="kicker">Wallet</p>
           <h1 className="welcome">Welcome back</h1>
           <p className="lede">Unlock your non-custodial wallet. Earth never has your keys.</p>
           <label>
@@ -440,18 +434,19 @@ export function App() {
 
       {view === "home" && state.unlocked ? (
         <>
-          <div className="header">
-            <div className="account">
-              <Mark size={28} />
+          <header className="topbar">
+            <button type="button" className="brand brand-btn" onClick={() => setView("wallets")}>
+              <Mark size={32} />
               <div>
-                <strong>Account 1</strong>
-                <span>{state.networkLabel}</span>
+                <h1>{state.accounts.find((row) => row.id === state.activeAccountId)?.name ?? "Earth"}</h1>
+                <p>Switch wallet</p>
               </div>
-            </div>
+            </button>
             <div className="header-actions">
-              <button type="button" className="icon-btn" onClick={() => void copyText(state.address ?? "", "Address copied")} title="Copy address">
-                <IconCopy />
-              </button>
+              <span className="status-pill">
+                <span className="status-dot" />
+                {state.networkLabel}
+              </span>
               <button
                 type="button"
                 className="icon-btn"
@@ -466,19 +461,28 @@ export function App() {
                 <IconLock />
               </button>
             </div>
-          </div>
-          <div className="balance-block">
+          </header>
+          <section className="balance-panel">
+            <p className="kicker">Portfolio</p>
             <p className="usd">
               {portfolioUsd != null
                 ? `$${portfolioUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                 : `${formatAmount(BigInt(sol?.amount ?? "0"), 9, 4)} SOL`}
             </p>
-            <p className="sub">{shortAddress(state.address ?? "", 4)}</p>
-          </div>
+            <button
+              type="button"
+              className="wallet-chip mono"
+              onClick={() => void copyText(state.address ?? "", "Address copied")}
+              title={state.address}
+            >
+              <span className="wallet-dot" />
+              {state.solDomain ?? shortAddress(state.address ?? "", 4)}
+            </button>
+          </section>
           <div className="actions">
             <button
               type="button"
-              className="action"
+              className="primary"
               onClick={() => {
                 setSelected(sol);
                 setAmount("");
@@ -486,80 +490,96 @@ export function App() {
                 setView("send");
               }}
             >
-              <i>
-                <IconSend />
-              </i>
               Send
             </button>
-            <button type="button" className="action" onClick={() => setView("receive")}>
-              <i>
-                <IconReceive />
-              </i>
+            <button type="button" className="ghost" onClick={() => setView("receive")}>
               Receive
             </button>
-            <button type="button" className="action" onClick={() => void copyText(state.address ?? "", "Address copied")}>
-              <i>
-                <IconCopy />
-              </i>
-              Copy
-            </button>
-            <button
-              type="button"
-              className="action"
-              onClick={() =>
-                void run(async () => {
-                  await call({ type: "REFRESH" });
-                  await load("home");
-                })
-              }
-            >
-              <i>
-                <IconClock />
-              </i>
-              Refresh
-            </button>
           </div>
-          <div className="tabs">
-            <button type="button" className="active">
-              Tokens
-            </button>
-          </div>
-          <div className="grow">
-            {listed.map((token) => (
+          <section className="panel assets">
+            <div className="panel-head">
+              <div className="segment">
+                <button type="button" className={homeTab === "tokens" ? "active" : ""} onClick={() => setHomeTab("tokens")}>
+                  Tokens
+                </button>
+                <button
+                  type="button"
+                  className={homeTab === "collectibles" ? "active" : ""}
+                  onClick={() => setHomeTab("collectibles")}
+                >
+                  Collectibles
+                </button>
+              </div>
               <button
-                key={token.mint + token.standardId + (token.nativeSol ? "-native" : "")}
                 type="button"
-                className="token-row"
-                onClick={() => {
-                  setSelected(token);
-                  setAmount("");
-                  setTo("");
-                  setView("send");
-                }}
+                className="linkish"
+                onClick={() =>
+                  void run(async () => {
+                    await call({ type: "REFRESH" });
+                    await load("home");
+                  })
+                }
               >
-                <TokenAvatar symbol={token.symbol} size={36} />
-                <div className="token-meta">
-                  <strong>{token.symbol}</strong>
-                  <span>
-                    {token.name}
-                    {token.amountWidth === "u128" ? " · u128" : ""}
-                    {token.extensions.includes("transfer-fee") ? " · fee" : ""}
-                  </span>
-                </div>
-                <div className="token-amt">
-                  {formatAmount(BigInt(token.amount), token.decimals)}
-                  {token.nativeSol && solUsd ? (
-                    <small>
-                      $
-                      {(Number(formatAmount(BigInt(token.amount), token.decimals, 8)) * solUsd).toLocaleString(undefined, {
-                        maximumFractionDigits: 2,
-                      })}
-                    </small>
-                  ) : null}
-                </div>
+                Refresh
               </button>
-            ))}
-          </div>
+            </div>
+            <div className="grow">
+              {homeTab === "tokens"
+                ? listed.map((token) => (
+                    <button
+                      key={token.mint + token.standardId + (token.nativeSol ? "-native" : "")}
+                      type="button"
+                      className="token-row"
+                      onClick={() => {
+                        setSelected(token);
+                        setAmount("");
+                        setTo("");
+                        setView("send");
+                      }}
+                    >
+                      <TokenAvatar symbol={token.symbol} size={36} />
+                      <div className="token-meta">
+                        <strong>{token.symbol}</strong>
+                        <span>
+                          {token.name}
+                          {token.amountWidth === "u128" ? " · u128" : ""}
+                          {token.extensions.includes("transfer-fee") ? " · fee" : ""}
+                        </span>
+                      </div>
+                      <div className="token-amt">
+                        {formatAmount(BigInt(token.amount), token.decimals)}
+                        {token.nativeSol && solUsd ? (
+                          <small>
+                            $
+                            {(Number(formatAmount(BigInt(token.amount), token.decimals, 8)) * solUsd).toLocaleString(
+                              undefined,
+                              { maximumFractionDigits: 2 },
+                            )}
+                          </small>
+                        ) : null}
+                      </div>
+                    </button>
+                  ))
+                : (state.collectibles ?? []).length === 0
+                  ? <p className="lede" style={{ padding: "12px 10px" }}>No collectibles on this wallet.</p>
+                  : (state.collectibles ?? []).map((item) => (
+                      <div key={item.mint} className="token-row nft-row">
+                        {item.image ? (
+                          <img className="nft-thumb" src={item.image} alt="" />
+                        ) : (
+                          <TokenAvatar symbol={item.symbol || item.name || "NFT"} size={36} />
+                        )}
+                        <div className="token-meta">
+                          <strong>{item.name}</strong>
+                          <span>
+                            {item.collection ? shortAddress(item.collection, 4) : item.compressed ? "compressed" : "collectible"}
+                            {item.amount !== "1" ? ` · ×${item.amount}` : ""}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+            </div>
+          </section>
         </>
       ) : null}
 
@@ -571,7 +591,7 @@ export function App() {
             </button>
             <h2>Send {selected.symbol}</h2>
           </div>
-          <p className="sub" style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
+          <p className="lede" style={{ margin: 0 }}>
             Balance {formatAmount(BigInt(selected.amount), selected.decimals)} {selected.symbol}
           </p>
           {selected.frozen ? <p className="notice alert">This account is frozen.</p> : null}
@@ -589,7 +609,7 @@ export function App() {
           </label>
           <label>
             To
-            <input value={to} placeholder="Address or .sol later" autoCorrect="off" spellCheck={false} onChange={(e) => setTo(e.target.value)} />
+            <input value={to} placeholder="Solana address" autoCorrect="off" spellCheck={false} onChange={(e) => setTo(e.target.value)} />
           </label>
           <button
             type="button"
@@ -703,144 +723,53 @@ export function App() {
             <h2>Standards</h2>
           </div>
           <p className="lede">
-            Register a program, or paste a share code from the Earth site so you can hold tokens minted on someone
-            else&apos;s standard.
+            Create a new standard on the Earth site — upload public source, burn $1,000 of $EARTH, Earth deploys. Seeded
+            factories here include Memecoin, Reflect, Confidential, Vest, and Mandate (AI-agent native). Paste a standard
+            ID or share code so this wallet can hold its tokens. Source is shown on each card when the catalog has it.
           </p>
           <label>
-            Adopt from share code
-            <input value={shareCode} onChange={(e) => setShareCode(e.target.value)} placeholder="Paste from Earth → Copy link" />
+            Standard ID
+            <input
+              value={standardId}
+              onChange={(e) => setStandardId(e.target.value)}
+              placeholder="TSxxx6"
+              autoCorrect="off"
+              spellCheck={false}
+            />
           </label>
-          <button
-            type="button"
-            className="ghost"
-            disabled={busy || !shareCode.trim()}
-            onClick={() =>
-              void run(async () => {
-                const row = decodeShareCode(shareCode);
-                await call({
-                  type: "ADOPT_STANDARD",
-                  id: row.id,
-                  name: row.name,
-                  programId: row.programId,
-                  kind: row.kind,
-                  amountWidth: row.amountWidth,
-                  notes: row.notes,
-                });
-                setShareCode("");
-                setTokStandard(row.id);
-                await load("standards");
-              })
-            }
-          >
-            Add published standard
-          </button>
-          <label>
-            Name
-            <input value={stdName} onChange={(e) => setStdName(e.target.value)} placeholder="Meridian" />
-          </label>
-          <label>
-            Program ID
-            <input value={stdProgram} onChange={(e) => setStdProgram(e.target.value)} placeholder="On-chain program" />
-          </label>
-          <div className="row">
-            <label>
-              Kind
-              <select value={stdKind} onChange={(e) => setStdKind(e.target.value as StandardKind)}>
-                <option value="custom">custom</option>
-                <option value="token-2022">token-2022</option>
-                <option value="spl-token">spl-token</option>
-              </select>
-            </label>
-            <label>
-              Width
-              <select value={stdWidth} onChange={(e) => setStdWidth(e.target.value as AmountWidth)}>
-                <option value="u128">u128</option>
-                <option value="u64">u64</option>
-              </select>
-            </label>
-          </div>
           <button
             type="button"
             className="primary"
-            disabled={busy}
+            disabled={busy || !standardId.trim()}
             onClick={() =>
               void run(async () => {
-                await call({
-                  type: "REGISTER_STANDARD",
-                  name: stdName,
-                  programId: stdProgram,
-                  kind: stdKind,
-                  amountWidth: stdWidth,
-                });
-                setStdName("");
-                setStdProgram("");
+                await call({ type: "IMPORT_STANDARD", id: standardId });
+                setStandardId("");
                 await load("standards");
+                flash("Standard imported");
               })
             }
           >
-            Add standard
-          </button>
-          <label>
-            List a mint on
-            <select value={tokStandard} onChange={(e) => setTokStandard(e.target.value)}>
-              {state.standards.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Ticker
-            <input value={tokSymbol} onChange={(e) => setTokSymbol(e.target.value)} />
-          </label>
-          <label>
-            Name
-            <input value={tokName} onChange={(e) => setTokName(e.target.value)} />
-          </label>
-          <label>
-            Mint (optional)
-            <input value={tokMint} onChange={(e) => setTokMint(e.target.value)} placeholder="Blank = preview mint" />
-          </label>
-          <label>
-            Decimals
-            <input value={tokDecimals} onChange={(e) => setTokDecimals(e.target.value)} />
-          </label>
-          <button
-            type="button"
-            className="ghost"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                await call({
-                  type: "ADD_TOKEN",
-                  standardId: tokStandard,
-                  symbol: tokSymbol,
-                  name: tokName,
-                  mint: tokMint,
-                  decimals: Number(tokDecimals),
-                });
-                setTokSymbol("");
-                setTokName("");
-                setTokMint("");
-                await load("standards");
-              })
-            }
-          >
-            List token
+            Import
           </button>
           {state.standards.map((standard) => (
             <article key={standard.id} className="notice stack">
               <div className="header" style={{ margin: 0 }}>
                 <strong>{standard.name}</strong>
-                <span className="pill">{standard.amountWidth}</span>
+                <span className="pill">{standard.id}</span>
               </div>
               {reviewChecks(standard).slice(0, 1).map((check) => (
                 <span key={check} className="pill warn">
                   {check}
                 </span>
               ))}
-              {standard.userCreated ? (
+              {standard.sourceCode?.code ? (
+                <details>
+                  <summary className="fine">Public source · {standard.sourceCode.filename}</summary>
+                  <pre className="source-pre">{standard.sourceCode.code}</pre>
+                </details>
+              ) : null}
+              {standard.userCreated || standard.source === "catalog" ? (
                 <button
                   type="button"
                   className="danger"
@@ -856,6 +785,92 @@ export function App() {
               ) : null}
             </article>
           ))}
+        </div>
+      ) : null}
+
+      {view === "wallets" && state.unlocked ? (
+        <div className="grow stack">
+          <div className="subhead">
+            <button type="button" className="icon-btn" onClick={() => setView("home")}>
+              <IconBack />
+            </button>
+            <h2>Wallets</h2>
+          </div>
+          <p className="lede">Derived wallets share this seed. Import another seed to add a separate wallet.</p>
+          {state.accounts.map((account) => (
+            <div key={account.id} className={`account-card${account.id === state.activeAccountId ? " active" : ""}`}>
+              <button
+                type="button"
+                className="account-main"
+                onClick={() =>
+                  void run(async () => {
+                    if (account.id !== state.activeAccountId) await call({ type: "SWITCH_ACCOUNT", id: account.id });
+                    await load("home");
+                  })
+                }
+              >
+                <strong>{account.name}</strong>
+                <span className="mono">{shortAddress(account.address, 4)}</span>
+              </button>
+              <div className="account-actions">
+                {account.id === state.activeAccountId ? <span className="pill">Active</span> : null}
+                <span className="pill">{account.kind === "imported" ? "Imported" : "Derived"}</span>
+                {state.accounts.length > 1 ? (
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() =>
+                      void run(async () => {
+                        await call({ type: "REMOVE_ACCOUNT", id: account.id });
+                        await load("wallets");
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await call({ type: "ADD_ACCOUNT" });
+                await load("home");
+              })
+            }
+          >
+            Add wallet
+          </button>
+          <label>
+            Import another seed
+            <textarea
+              rows={3}
+              value={importMnemonic}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(e) => setImportMnemonic(e.target.value)}
+              placeholder="12 or 24 words"
+            />
+          </label>
+          <button
+            type="button"
+            className="ghost"
+            disabled={busy || !importMnemonic.trim()}
+            onClick={() =>
+              void run(async () => {
+                await call({ type: "IMPORT_ACCOUNT", mnemonic: importMnemonic });
+                setImportMnemonic("");
+                await load("home");
+              })
+            }
+          >
+            Import wallet
+          </button>
         </div>
       ) : null}
 
@@ -882,6 +897,28 @@ export function App() {
             }
           >
             Save RPC
+          </button>
+          <label>
+            Earth catalog URL
+            <input
+              value={catalogUrl}
+              onChange={(e) => setCatalogUrl(e.target.value)}
+              placeholder="https://your-earth-site.netlify.app"
+            />
+          </label>
+          <button
+            type="button"
+            className="ghost"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await call({ type: "SET_CATALOG", url: catalogUrl });
+                await load("settings");
+                flash("Catalog saved");
+              })
+            }
+          >
+            Save catalog
           </button>
           <label>
             Auto-lock (minutes)
@@ -967,19 +1004,15 @@ export function App() {
       {unlockedNav ? (
         <nav className="tabbar">
           <button type="button" className={view === "home" || view === "send" || view === "review" || view === "receive" ? "active" : ""} onClick={() => setView("home")}>
-            <IconHome />
             Home
           </button>
           <button type="button" className={view === "activity" ? "active" : ""} onClick={() => setView("activity")}>
-            <IconClock />
             Activity
           </button>
           <button type="button" className={view === "standards" ? "active" : ""} onClick={() => setView("standards")}>
-            <IconGrid />
             Standards
           </button>
           <button type="button" className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
-            <IconGear />
             Settings
           </button>
         </nav>

@@ -10,9 +10,10 @@ Netlify hosts the web app. The AMM math, routing, and adapter registry run in th
 - **Swap** — quotes Earth CPMM, Earth Stable, two-hop Earth routes, and Jupiter (optional) for SPL pairs
 - **Pools** — seeded pairs plus any pools users create
 - **Liquidity** — create a pool between any two listed tokens / standards
-- **Standards** — create a token program adapter, publish it so others can find it, mint your own ticker on any standard
+- **Launchpad** — create a coin on a live standard with virtual SOL liquidity; graduates into a locked Earth pool
+- **Standards** — create a contract on an Earth factory (variables only — including Mandate, the AI-agent native standard), or upload public contract source and burn $1,000 of $EARTH for a new standard Earth deploys so others can list tickers on it
 - **Docs** — in-app user guide (same material as `docs/`)
-- **Indexer** — prices Earth pools from reserves; optional Pump.fun mcaps for SPL mints via `/api/mcaps`; RPC proxy at `/api/rpc`; public standard catalog at `/api/standards`
+- **Indexer** — prices Earth pools from reserves; optional external market caps for SPL mints via `/api/mcaps`; RPC proxy at `/api/rpc`; public standard catalog at `/api/standards`
 
 Earth does **not** stamp unknown programs as safe. Unverified means allowlisted in this UI, not audited.
 
@@ -54,6 +55,7 @@ Open http://localhost:5173/
    - `SOLANA_RPC_URL` — used by `/api/rpc`
    - `VITE_RPC_URL` — browser RPC fallback in local dev
    - `JUPITER_API_KEY` — extra aggregator venue for SPL / Token-2022
+   - `VITE_EARTH_MINT` — $EARTH mint once the token is live (listing a custom standard burns $1,000 of $EARTH)
 
 Without a Jupiter key, Earth still routes across its own pools.
 

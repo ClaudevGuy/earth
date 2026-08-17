@@ -1,6 +1,7 @@
 import { WSOL } from "../lib/constants";
 import type { ListedToken } from "../types";
 import { loadJson, saveJson } from "../lib/storage";
+import { canonicalStandardId } from "../lib/standardId";
 
 export const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
@@ -29,7 +30,12 @@ const BUILTIN: ListedToken[] = [
 export function loadTokens(): ListedToken[] {
   const extra = loadJson<ListedToken[]>("tokens", []);
   const seen = new Set(BUILTIN.map((t) => t.mint));
-  return [...BUILTIN, ...extra.filter((t) => !seen.has(t.mint))];
+  return [
+    ...BUILTIN,
+    ...extra
+      .filter((t) => !seen.has(t.mint))
+      .map((t) => ({ ...t, standardId: canonicalStandardId(t.standardId) })),
+  ];
 }
 
 export function saveExtraTokens(all: ListedToken[]): void {

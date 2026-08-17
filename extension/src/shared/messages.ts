@@ -1,4 +1,4 @@
-import type { AmountWidth, ListedToken, PageMethod, PendingRequest, PublicWalletState, StandardKind } from "./types";
+import type { ListedToken, PageMethod, PendingRequest, PublicWalletState } from "./types";
 
 export type PopupRequest =
   | { type: "GET_STATE" }
@@ -11,21 +11,17 @@ export type PopupRequest =
   | { type: "PING" }
   | { type: "REFRESH" }
   | { type: "SEND"; mint: string; to: string; amount: string; standardId: string; nativeSol?: boolean }
-  | { type: "REGISTER_STANDARD"; name: string; programId: string; kind: StandardKind; amountWidth: AmountWidth; notes?: string }
-  | {
-      type: "ADOPT_STANDARD";
-      id: string;
-      name: string;
-      programId: string;
-      kind: StandardKind;
-      amountWidth: AmountWidth;
-      notes?: string;
-    }
-  | { type: "ADD_TOKEN"; standardId: string; symbol: string; name: string; mint: string; decimals: number }
+  | { type: "IMPORT_STANDARD"; id: string }
   | { type: "REMOVE_STANDARD"; standardId: string }
   | { type: "SET_RPC"; url: string }
+  | { type: "SET_CATALOG"; url: string }
   | { type: "SET_AUTOLOCK"; minutes: number }
   | { type: "EXPORT_SEED"; password: string }
+  | { type: "SWITCH_ACCOUNT"; id: string }
+  | { type: "ADD_ACCOUNT" }
+  | { type: "IMPORT_ACCOUNT"; mnemonic: string }
+  | { type: "RENAME_ACCOUNT"; id: string; name: string }
+  | { type: "REMOVE_ACCOUNT"; id: string }
   | { type: "FORGET_SITE"; origin: string }
   | { type: "GET_PENDING"; id?: string }
   | { type: "RESOLVE_PENDING"; id: string; approve: boolean };

@@ -1,15 +1,22 @@
-import type { TokenStandard } from "../types";
+import type { StandardSourceCode, TokenStandard } from "../types";
 import type { FactorySpec, VariableDef } from "./types";
+import { FACTORY_ID_ALIASES, FACTORY_STANDARD_IDS, canonicalStandardId } from "../lib/standardId";
+import memecoinRs from "../../programs/memecoin/src/lib.rs?raw";
+import reflectRs from "../../programs/reflect/src/lib.rs?raw";
+import confidentialRs from "../../programs/confidential/src/lib.rs?raw";
+import vestingRs from "../../programs/vesting/src/lib.rs?raw";
+import agentRs from "../../programs/agent/src/lib.rs?raw";
 
 export const FACTORY_PROGRAM = {
   memecoin: "EarthMemeFactory11111111111111111111111111",
   reflect: "EarthReflectStd11111111111111111111111111",
   confidential: "EarthZkElGamal111111111111111111111111111",
   vesting: "EarthVestLock1111111111111111111111111111",
-  launch: "EarthLaunchCurve1111111111111111111111111",
+  agent: "EarthAgentMandate11111111111111111111111",
 } as const;
 
-const commonNotes = "Earth-built factory. Mint by filling variables — program ID, kind, and amount width are fixed.";
+const commonNotes =
+  "Earth-built factory. Create a contract by filling variables — Earth deploys the program. Kind and amount width are fixed.";
 
 function std(
   id: TokenStandard["id"],
@@ -18,6 +25,7 @@ function std(
   amountWidth: TokenStandard["amountWidth"],
   factory: TokenStandard["factory"],
   notes: string,
+  sourceCode: StandardSourceCode,
 ): TokenStandard {
   return {
     id,
@@ -31,6 +39,7 @@ function std(
     publisher: "earth",
     factory,
     notes,
+    sourceCode,
   };
 }
 
@@ -40,7 +49,7 @@ const memeVars: VariableDef[] = [
     label: "Total supply",
     kind: "amount",
     default: "1000000000",
-    help: "Whole tokens at mint. Decimals are applied automatically.",
+    help: "Whole tokens when the contract is created. Decimals are applied automatically.",
   },
   {
     key: "buyTaxBps",
@@ -147,7 +156,7 @@ const reflectVars: VariableDef[] = [
     kind: "address",
     default: "",
     required: false,
-    placeholder: "Blank = mint authority",
+    placeholder: "Blank = the creator",
   },
 ];
 
@@ -176,6 +185,114 @@ const confidentialVars: VariableDef[] = [
     min: 1,
     max: 65_535,
     help: "Credits stay pending until ApplyPending (Token-2022 confidential style).",
+  },
+];
+
+const agentVars: VariableDef[] = [
+  {
+    key: "totalSupply",
+    label: "Total supply",
+    kind: "amount",
+    default: "1000000000",
+    help: "Whole tokens at create. Endowment is taken from this first mint into the on-chain treasury.",
+  },
+  {
+    key: "levyBps",
+    label: "Agent levy (bps)",
+    kind: "bps",
+    default: 100,
+    min: 0,
+    max: 2500,
+    help: "On-chain: every transfer credits this share to the agent treasury. 100 = 1%. Cap 2500 (25%).",
+  },
+  {
+    key: "endowmentBps",
+    label: "Endowment (bps of supply)",
+    kind: "bps",
+    default: 1000,
+    min: 0,
+    max: 5000,
+    help: "On-chain: share of the first mint that seeds the treasury. 1000 = 10%. Cap 5000 (50%).",
+  },
+  {
+    key: "epochSpendBps",
+    label: "Epoch spend cap (bps of treasury)",
+    kind: "bps",
+    default: 500,
+    min: 1,
+    max: 10000,
+    help: "On-chain: max the operator can ACT in one epoch. 500 = 5% of treasury. Resets every epoch.",
+  },
+  {
+    key: "epochHours",
+    label: "Epoch (hours)",
+    kind: "number",
+    default: 24,
+    min: 1,
+    max: 168,
+    help: "On-chain: hours between epoch resets. 24 = daily. Max 168 (7 days).",
+  },
+  {
+    key: "maxActBps",
+    label: "Max single ACT (bps of treasury)",
+    kind: "bps",
+    default: 200,
+    min: 1,
+    max: 10000,
+    help: "On-chain: one ACT cannot exceed this share of the treasury. 200 = 2%. Applies in addition to the epoch cap.",
+  },
+  {
+    key: "cooldownHours",
+    label: "Cooldown between ACTs (hours)",
+    kind: "number",
+    default: 1,
+    min: 0,
+    max: 168,
+    help: "On-chain: minimum hours between two ACTs. 0 = no cooldown. 1 = one ACT per hour.",
+  },
+  {
+    key: "operator",
+    label: "Operator pubkey",
+    kind: "address",
+    default: "",
+    required: false,
+    placeholder: "Blank = connected Earth Wallet",
+    help: "On-chain: the only key that can sign ACT. This is the off-chain agent. Not the model weights.",
+  },
+  {
+    key: "allowDest1",
+    label: "Allowed ACT destination 1",
+    kind: "address",
+    default: "",
+    required: true,
+    placeholder: "Solana address (required)",
+    help: "On-chain allowlist. ACT may credit a token account owned by this address only. Paste a wallet pubkey, not a mint.",
+  },
+  {
+    key: "allowDest2",
+    label: "Allowed ACT destination 2",
+    kind: "address",
+    default: "",
+    required: false,
+    placeholder: "Optional second wallet",
+    help: "Optional second owner on the on-chain allowlist.",
+  },
+  {
+    key: "allowDest3",
+    label: "Allowed ACT destination 3",
+    kind: "address",
+    default: "",
+    required: false,
+    placeholder: "Optional third wallet",
+    help: "Optional third owner on the on-chain allowlist. Max three.",
+  },
+  {
+    key: "mandate",
+    label: "Mandate (human policy)",
+    kind: "text",
+    default: "Spend treasury only to allowed destinations. Never exceed the epoch cap or per-ACT cap. Report every ACT.",
+    required: true,
+    help: "Hashed on-chain (not enforced as English). The allowlist, caps, and cooldown are what the program actually checks.",
   },
 ];
 
@@ -211,14 +328,14 @@ const vestingVars: VariableDef[] = [
     default: 0,
     min: 0,
     max: 3650,
-    help: "Clock starts this many days after mint.",
+    help: "Clock starts this many days after the contract is created.",
   },
   {
     key: "revocable",
-    label: "Revocable by authority",
+    label: "Revocable by creator",
     kind: "bool",
     default: false,
-    help: "If on, the mint authority can claw back unvested tokens.",
+    help: "If on, the creator can claw back unvested tokens.",
   },
   {
     key: "beneficiary",
@@ -231,67 +348,62 @@ const vestingVars: VariableDef[] = [
   },
 ];
 
-const launchVars: VariableDef[] = [
-  {
-    key: "totalSupply",
-    label: "Total supply",
-    kind: "amount",
-    default: "1000000000",
-  },
-  {
-    key: "tokenReserves",
-    label: "Tokens on the curve",
-    kind: "amount",
-    default: "800000000",
-    help: "Sold along the bonding curve. Rest is reserved for the graduated Earth pool.",
-  },
-  {
-    key: "virtualSol",
-    label: "Virtual SOL",
-    kind: "amount",
-    default: "30",
-    help: "Virtual quote reserve. Sets the starting price with tokens on the curve.",
-  },
-  {
-    key: "graduationSol",
-    label: "Graduation SOL",
-    kind: "amount",
-    default: "85",
-    help: "SOL raised on the curve before the mint migrates to an Earth CPMM pool.",
-  },
-  {
-    key: "creatorFeeBps",
-    label: "Creator fee (bps)",
-    kind: "bps",
-    default: 100,
-    min: 0,
-    max: 1000,
-    help: "Taken as the curve / pool swap fee. 100 = 1%.",
-  },
-];
+export function overlayKnownFactory(standard: TokenStandard): TokenStandard {
+  const factory = findFactory(standard.id);
+  if (!factory) return standard;
+  const seed = factory.standard;
+  return {
+    ...standard,
+    id: seed.id,
+    name: seed.name,
+    kind: seed.kind,
+    programId: seed.programId,
+    amountWidth: seed.amountWidth,
+    review: seed.review,
+    factory: seed.factory,
+    notes: seed.notes,
+    sourceCode: seed.sourceCode ?? standard.sourceCode,
+  };
+}
 
 export const FACTORIES: FactorySpec[] = [
   {
     standard: std(
-      "earth-memecoin",
+      FACTORY_STANDARD_IDS.agent,
+      "Mandate",
+      FACTORY_PROGRAM.agent,
+      "u64",
+      "agent",
+      `${commonNotes} AI-agent native. On-chain: treasury, levy, endowment, operator, destination allowlist, per-ACT cap, epoch cap, cooldown. The model stays off-chain and can only ACT inside those rules.`,
+      { filename: "lib.rs", code: agentRs },
+    ),
+    blurb: "AI-agent native. On-chain allowlist, per-ACT cap, epoch cap, cooldown. Pick this — not Launchpad, not Create a standard.",
+    defaultDecimals: 6,
+    variables: agentVars,
+  },
+  {
+    standard: std(
+      FACTORY_STANDARD_IDS.memecoin,
       "Memecoin",
       FACTORY_PROGRAM.memecoin,
       "u64",
       "memecoin",
       `${commonNotes} Buy/sell tax, burn, creator fee, max wallet, anti-snipe.`,
+      { filename: "lib.rs", code: memecoinRs },
     ),
-    blurb: "Taxed meme mint with burn, creator cut, wallet cap, and a short anti-snipe window.",
+    blurb: "Taxed meme contract with burn, creator cut, wallet cap, and a short anti-snipe window.",
     defaultDecimals: 6,
     variables: memeVars,
   },
   {
     standard: std(
-      "earth-reflect",
+      FACTORY_STANDARD_IDS.reflect,
       "Reflect / burn",
       FACTORY_PROGRAM.reflect,
       "u64",
       "reflect",
       `${commonNotes} Every transfer splits into holder reflection, burn, and treasury.`,
+      { filename: "lib.rs", code: reflectRs },
     ),
     blurb: "Redistribution token: each transfer reflects to holders, burns supply, and funds a treasury.",
     defaultDecimals: 9,
@@ -299,12 +411,13 @@ export const FACTORIES: FactorySpec[] = [
   },
   {
     standard: std(
-      "earth-confidential",
+      FACTORY_STANDARD_IDS.confidential,
       "Confidential (ZK ElGamal)",
       FACTORY_PROGRAM.confidential,
       "u64",
       "confidential",
       `${commonNotes} Encrypted balances. Transfers verify range and equality proofs on the native ZK ElGamal proof program (ZkE1Gama1Proof11111111111111111111111111111).`,
+      { filename: "lib.rs", code: confidentialRs },
     ),
     blurb: "Private balances via ElGamal ciphertexts. Proofs are verified by Solana’s ZK ElGamal program.",
     defaultDecimals: 6,
@@ -312,39 +425,33 @@ export const FACTORIES: FactorySpec[] = [
   },
   {
     standard: std(
-      "earth-vesting",
+      FACTORY_STANDARD_IDS.vesting,
       "Vested lock",
       FACTORY_PROGRAM.vesting,
       "u128",
       "vesting",
       `${commonNotes} Cliff plus linear unlock. Unvested amounts cannot transfer. Optional clawback.`,
+      { filename: "lib.rs", code: vestingRs },
     ),
     blurb: "Team and investor allocations with a cliff, linear vest, and optional revocable grants.",
     defaultDecimals: 9,
     variables: vestingVars,
   },
-  {
-    standard: std(
-      "earth-launch",
-      "Launch curve",
-      FACTORY_PROGRAM.launch,
-      "u64",
-      "launch",
-      `${commonNotes} Bonding-curve fair launch that graduates into an Earth constant-product pool.`,
-    ),
-    blurb: "Fair launch on a virtual-reserve curve. Hits a SOL target, then becomes an Earth CPMM pool.",
-    defaultDecimals: 6,
-    variables: launchVars,
-    autoPool: true,
-  },
 ];
 
 export const FACTORY_STANDARDS: TokenStandard[] = FACTORIES.map((row) => row.standard);
 
-export const FACTORY_IDS = new Set(FACTORY_STANDARDS.map((s) => s.id));
+export const FACTORY_IDS = new Set([
+  ...FACTORY_STANDARDS.map((s) => s.id),
+  ...Object.keys(FACTORY_ID_ALIASES),
+  "earth-launch",
+]);
 
 export function findFactory(id: string): FactorySpec | undefined {
-  return FACTORIES.find((row) => row.standard.id === id);
+  const canonical = canonicalStandardId(id);
+  return FACTORIES.find(
+    (row) => row.standard.id === canonical || row.standard.id === id || row.standard.factory === id,
+  );
 }
 
 export function defaultVariableValues(factory: FactorySpec): Record<string, string> {

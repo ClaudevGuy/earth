@@ -66,11 +66,25 @@ export function parseMintConfig(factory: FactorySpec, values: Record<string, str
       throw new Error("Vest duration must be at least the cliff.");
     }
   }
-  if (kind === "launch") {
-    const supply = Number(config.totalSupply);
-    const onCurve = Number(config.tokenReserves);
-    if (!(onCurve < supply)) throw new Error("Tokens on the curve must be less than total supply.");
-    if (Number(config.graduationSol) <= 0) throw new Error("Graduation SOL must be greater than 0.");
+  if (kind === "agent") {
+    const mandate = String(config.mandate ?? "").trim();
+    if (mandate.length < 8) throw new Error("Mandate must be at least 8 characters.");
+    if (mandate.length > 512) throw new Error("Mandate must be under 512 characters.");
+    if (Number(config.levyBps) === 0 && Number(config.endowmentBps) === 0) {
+      throw new Error("Set a transfer levy or an endowment so the agent treasury can be funded.");
+    }
+    const dests = [config.allowDest1, config.allowDest2, config.allowDest3]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean);
+    if (dests.length === 0) {
+      throw new Error(
+        "Allowed ACT destination 1 is required. Paste a Solana wallet pubkey. ACT can only credit token accounts owned by an allowlisted address.",
+      );
+    }
+    if (new Set(dests).size !== dests.length) {
+      throw new Error("Allowed ACT destinations must be unique.");
+    }
+    config.mandate = mandate;
   }
   return config;
 }
@@ -101,8 +115,13 @@ export function configSummary(config?: TokenMintConfig): string[] {
   } else if (factory === "vesting") {
     lines.push(`${config.cliffDays}d cliff · ${config.vestDays}d vest`);
     if (config.revocable) lines.push("revocable");
-  } else if (factory === "launch") {
-    lines.push(`curve ${config.tokenReserves} / ${config.virtualSol} SOL · graduate at ${config.graduationSol} SOL`);
+  } else if (factory === "agent") {
+    lines.push(`levy ${Number(config.levyBps) / 100}% · endowment ${Number(config.endowmentBps) / 100}%`);
+    lines.push(
+      `epoch cap ${Number(config.epochSpendBps) / 100}% / ${config.epochHours}h · ACT cap ${Number(config.maxActBps) / 100}% · cooldown ${config.cooldownHours}h`,
+    );
+    const dests = [config.allowDest1, config.allowDest2, config.allowDest3].filter((value) => String(value ?? "").trim());
+    lines.push(`${dests.length} allowed ACT destination${dests.length === 1 ? "" : "s"}`);
   }
   return lines;
 }
@@ -113,6 +132,16 @@ export function asNumber(config: TokenMintConfig, key: string, fallback = 0): nu
   if (typeof value === "boolean") return value ? 1 : 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function fillAgentDefaults(values: Record<string, string>, wallet?: string): Record<string, string> {
+  const next = { ...values };
+  const addr = wallet?.trim() ?? "";
+  if (addr) {
+    if (!next.operator?.trim()) next.operator = addr;
+    if (!next.allowDest1?.trim()) next.allowDest1 = addr;
+  }
+  return next;
 }
 
 export function asString(config: TokenMintConfig, key: string): string {

@@ -7,6 +7,8 @@ import { formatAmount } from "../lib/amounts.ts";
 import { bpsLabel, formatUsdish } from "../lib/format.ts";
 import { resetPools } from "../amm/pools.ts";
 import { TokenAvatar } from "./TokenAvatar.tsx";
+import { SafeBadge } from "./LockAuthorities.tsx";
+import { isTokenSafe } from "../lib/tokenSafety.ts";
 
 export function PoolsView({
   earth,
@@ -62,12 +64,14 @@ export function PoolsView({
                 <td>
                   <div className="pair">
                     <span className="pair-marks">
-                      <TokenAvatar symbol={a?.symbol ?? "?"} size={28} />
-                      <TokenAvatar symbol={b?.symbol ?? "?"} size={28} />
+                      <TokenAvatar symbol={a?.symbol ?? "?"} logo={a?.logo} size={28} />
+                      <TokenAvatar symbol={b?.symbol ?? "?"} logo={b?.logo} size={28} />
                     </span>
                     <div>
                       <strong>
-                        {a?.symbol ?? "?"} / {b?.symbol ?? "?"}
+                        {a?.symbol ?? "?"} / {b?.symbol ?? "?"}{" "}
+                        {a && isTokenSafe(a) ? <SafeBadge token={a} /> : null}
+                        {b && isTokenSafe(b) ? <SafeBadge token={b} /> : null}
                       </strong>
                       <div className="mono muted">{pool.id}</div>
                     </div>

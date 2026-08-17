@@ -6,8 +6,30 @@ export type ReviewStatus = "native" | "registered" | "unverified";
 
 export type StandardSource = "native" | "seeded" | "created" | "catalog";
 
-/** Earth-built factory programs. Users mint on these by filling variables only. */
-export type FactoryKind = "memecoin" | "reflect" | "confidential" | "vesting" | "launch";
+/** Public token-program source. Required for custom standards; shown on the card and in the catalog. */
+export interface StandardSourceCode {
+  filename: string;
+  code: string;
+}
+
+/** Earth-built factory programs. Users create a contract on these by filling variables only. */
+export type FactoryKind =
+  | "memecoin"
+  | "reflect"
+  | "confidential"
+  | "vesting"
+  | "agent"
+  | "kernel"
+  | "proxy"
+  | "flash"
+  | "chamber"
+  | "launch";
+
+export interface TokenSocials {
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+}
 
 export interface TokenStandard {
   id: string;
@@ -23,9 +45,10 @@ export interface TokenStandard {
   publisher?: string;
   createdAt?: number;
   factory?: FactoryKind;
+  sourceCode?: StandardSourceCode;
 }
 
-/** Public catalog record — what other users can find and mint against. */
+/** Public catalog record — what other users can find and create a contract against. */
 export interface CatalogStandard {
   id: string;
   name: string;
@@ -36,10 +59,20 @@ export interface CatalogStandard {
   publisher?: string;
   publishedAt: number;
   factory?: FactoryKind;
+  sourceCode?: StandardSourceCode;
 }
 
 /** Mint-time variables for an Earth factory standard. */
 export type TokenMintConfig = Record<string, string | number | boolean>;
+
+/** One-way listing locks. All three true → the token is marked Safe on Trade. */
+export interface TokenLock {
+  mintRevoked: boolean;
+  freezeRevoked: boolean;
+  metadataImmutable: boolean;
+}
+
+export type LockKind = keyof TokenLock;
 
 export interface ListedToken {
   mint: string;
@@ -49,6 +82,34 @@ export interface ListedToken {
   standardId: string;
   tags?: string[];
   config?: TokenMintConfig;
+  lock?: TokenLock;
+  logo?: string;
+  description?: string;
+  socials?: TokenSocials;
+}
+
+/** A coin on the Earth launchpad bonding curve. Graduates into an Earth CPMM pool. */
+export interface LaunchpadCoin {
+  id: string;
+  mint: string;
+  standardId: string;
+  creator?: string;
+  createdAt: number;
+  virtualSol: string;
+  virtualTokens: string;
+  realSolRaised: string;
+  tokensSold: string;
+  graduationSol: string;
+  lpTokenReserve: string;
+  feeBps: number;
+  graduated: boolean;
+  poolId?: string;
+}
+
+export interface LaunchpadHolding {
+  mint: string;
+  owner: string;
+  amount: string;
 }
 
 export type CurveKind = "constant-product" | "stable";
@@ -95,7 +156,7 @@ export interface RouteQuote {
   note?: string;
 }
 
-export type Page = "trade" | "swap" | "pools" | "liquidity" | "standards" | "docs";
+export type Page = "trade" | "swap" | "pools" | "liquidity" | "launchpad" | "standards" | "docs";
 
 export interface PairFocus {
   mintA?: string;

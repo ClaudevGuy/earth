@@ -61,7 +61,7 @@ Your LP shares are shown on the Liquidity pair-notes panel.
 
 ## Create a pool from Standards
 
-When creating a standard, check **Also list my first token now** and **Create a pool now**. You can also mint a token on an existing public standard first, then create the pool from the token card.
+When creating a standard, check **Also create my first contract now** and **Create a pool now**. You can also create a contract on an existing public standard first, then create the pool from the token card.
 
 | Field | Notes |
 | --- | --- |
@@ -73,7 +73,7 @@ When creating a standard, check **Also list my first token now** and **Create a 
 
 Example: 1,000,000 MRD and 10 SOL implies 0.00001 SOL per MRD at start.
 
-Click **Create standard, token, and pool**. Earth opens **Trade** on that pair. You receive 100% of the initial LP shares.
+Click **Create standard, contract, and pool**. Earth opens **Trade** on that pair. You receive 100% of the initial LP shares.
 
 ## Create a pool from Liquidity
 
@@ -100,9 +100,9 @@ Same screen, existing pool: enter amounts for both tokens and **Add liquidity**.
 
 - **Spot** in a constant-product pool is `reserveOut / reserveIn` (in raw amounts; decimals differ per token).
 - **Price impact** on a swap is how much worse execution is than that spot, in bps.
-- **Pools** tab shows reserves and, when the indexer can price a side, approximate USD TVL. Custom preview mints often show “—” until they have an Earth-pool price path to SOL/USDC.
+- **Pools** tab shows reserves and, when the indexer can price a side, approximate USD TVL. Custom preview contracts often show “—” until they have an Earth-pool price path to SOL/USDC.
 
-The indexer prices Earth pools from **local reserves**, plus optional Pump.fun mcaps for SPL mints. Status in the header: `indexer live` vs `indexer local`.
+The indexer prices Earth pools from **local reserves**, plus optional external market caps for SPL mints. Status in the header: `indexer live` vs `indexer local`.
 
 ## Seeded demo pools
 

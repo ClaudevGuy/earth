@@ -1,5 +1,5 @@
 import type { Pool, RouteQuote } from "../types";
-import { applySwap, quotePool } from "./engine";
+import { applySwap } from "./engine";
 
 export function executeEarthRoute(pools: Pool[], route: RouteQuote): Pool[] {
   if (route.executable !== "earth") {
@@ -10,8 +10,9 @@ export function executeEarthRoute(pools: Pool[], route: RouteQuote): Pool[] {
     if (!hop.poolId) continue;
     const pool = next.find((p) => p.id === hop.poolId);
     if (!pool) throw new Error("Pool missing");
-    const out = quotePool(pool, hop.inMint, BigInt(hop.amountIn));
-    const updated = applySwap(pool, hop.inMint, BigInt(hop.amountIn), out);
+    const poolIn = BigInt(hop.poolAmountIn ?? hop.amountIn);
+    const poolOut = BigInt(hop.poolAmountOut ?? hop.amountOut);
+    const updated = applySwap(pool, hop.inMint, poolIn, poolOut);
     next = next.map((p) => (p.id === updated.id ? updated : p));
   }
   return next;

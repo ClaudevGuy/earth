@@ -19,7 +19,7 @@ That writes `earth-wallet/` (load unpacked) and `earth-wallet.zip` (store upload
 
 **Short description (132 characters max):**
 
-Non-custodial Solana wallet. Keys stay on your device. SPL, Token-2022, and any token standard you register.
+Non-custodial Solana wallet. Keys stay on your device. SPL, Token-2022, and every Earth token standard.
 
 (110 characters)
 
@@ -27,14 +27,14 @@ Non-custodial Solana wallet. Keys stay on your device. SPL, Token-2022, and any 
 
 Earth Wallet is a non-custodial Solana wallet. Your secret recovery phrase is created and encrypted on this device. Earth never holds your keys, never has a copy of your seed, and cannot recover a lost password.
 
-Most Solana wallets only show SPL Token and Token-2022. Earth Wallet is built for every token standard on Earth: native SOL, SPL, Token-2022 (including extensions such as transfer fees, metadata, and non-transferable mints), and any custom program you register — including 128-bit (u128) amounts.
+Most Solana wallets only show SPL Token and Token-2022. Earth Wallet is built for every token standard on Earth: native SOL, SPL, Token-2022 (including extensions such as transfer fees, metadata, and non-transferable tokens), and any custom program Earth deploys — including 128-bit (u128) amounts and Mandate, the AI-agent native factory (identity, treasury, and spend cap on-chain).
 
 WHAT YOU CAN DO
 
 • Create a new wallet or import an existing 12- or 24-word BIP-39 secret phrase
 • Send and receive SOL and tokens, with a review screen before every send
 • See balances grouped like a normal wallet, including Token-2022 extensions
-• Register a new token standard, adopt one from an Earth share code, and list mints
+• Adopt a token standard from an Earth share code and list contracts
 • Connect to sites through the wallet provider and Wallet Standard
 • Approve or reject connect, sign, and send requests — nothing is signed until you say so
 

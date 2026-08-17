@@ -1,6 +1,5 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "../shared/polyfill";
 import { ApproveApp } from "./App";
 import "../popup/styles.css";
 

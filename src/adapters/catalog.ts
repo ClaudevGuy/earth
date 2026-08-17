@@ -1,6 +1,8 @@
 import type { CatalogStandard, TokenStandard } from "../types";
-import { FACTORY_STANDARDS, findFactory } from "../standards/factories";
+import { FACTORY_STANDARDS, findFactory, overlayKnownFactory } from "../standards/factories";
+import { canonicalStandardId, isRetiredLaunchStandard } from "../lib/standardId";
 import { NATIVE_STANDARDS } from "./registry";
+import { sourceFromUnknown } from "../standards/source";
 
 export type CatalogStatus = "live" | "local";
 
@@ -17,12 +19,15 @@ export function catalogFromStandard(standard: TokenStandard, publisher?: string)
     publisher: publisher || standard.publisher,
     publishedAt: standard.createdAt ?? Date.now(),
     factory: standard.factory,
+    sourceCode: standard.sourceCode,
   };
 }
 
 export function standardFromCatalog(entry: CatalogStandard): TokenStandard {
+  const id = canonicalStandardId(entry.id);
+  const factory = findFactory(id)?.standard.factory ?? entry.factory;
   return {
-    id: entry.id,
+    id,
     name: entry.name,
     kind: entry.kind,
     programId: entry.programId,
@@ -33,7 +38,8 @@ export function standardFromCatalog(entry: CatalogStandard): TokenStandard {
     published: true,
     publisher: entry.publisher,
     createdAt: entry.publishedAt,
-    factory: entry.factory,
+    factory,
+    sourceCode: entry.sourceCode,
   };
 }
 
@@ -45,7 +51,7 @@ export const CATALOG_SEED: CatalogStandard[] = [
     programId: "MeridianU128Preview11111111111111111111111",
     amountWidth: "u128",
     notes:
-      "Built-in example adapter for 128-bit amounts. Anyone can list their own ticker on it in this preview.",
+      "Earth-built example adapter for 128-bit amounts. Anyone can create a contract on it.",
     publisher: "earth",
     publishedAt: 0,
   },
@@ -63,6 +69,8 @@ export function encodeShareCode(entry: CatalogStandard): string {
     notes: entry.notes,
     publisher: entry.publisher,
     factory: entry.factory,
+    sourceCode:
+      entry.sourceCode && entry.sourceCode.code.length <= 16_000 ? entry.sourceCode : undefined,
   });
   const bytes = new TextEncoder().encode(payload);
   let bin = "";
@@ -88,7 +96,7 @@ export function decodeShareCode(code: string): CatalogStandard {
       throw new Error("Unknown amount width in share code.");
     }
     return {
-      id: String(parsed.id),
+      id: canonicalStandardId(String(parsed.id)),
       name: String(parsed.name),
       kind: parsed.kind,
       programId: String(parsed.programId),
@@ -97,6 +105,7 @@ export function decodeShareCode(code: string): CatalogStandard {
       publisher: parsed.publisher ? String(parsed.publisher) : undefined,
       publishedAt: Date.now(),
       factory: findFactory(String(parsed.id))?.standard.factory ?? parsed.factory,
+      sourceCode: sourceFromUnknown(parsed.sourceCode),
     };
   } catch (err) {
     if (err instanceof Error && /share code|Unknown standard|Unknown amount/i.test(err.message)) throw err;
@@ -122,18 +131,28 @@ export function mergeStandards(local: TokenStandard[], catalog: CatalogStandard[
     byProgram.set(row.programId, row.id);
   }
   for (const row of catalog) {
-    if (native.has(row.id)) continue;
-    const existingId = byId.has(row.id) ? row.id : byProgram.get(row.programId);
+    const id = canonicalStandardId(row.id);
+    if (native.has(id)) continue;
+    const existingId = byId.has(id) ? id : byProgram.get(row.programId);
     if (existingId) {
       const current = byId.get(existingId);
       if (current && !current.published) {
-        byId.set(existingId, { ...current, published: true, publisher: current.publisher ?? row.publisher });
+        byId.set(existingId, {
+          ...current,
+          published: true,
+          publisher: current.publisher ?? row.publisher,
+          sourceCode: current.sourceCode ?? row.sourceCode,
+        });
+      } else if (current && !current.sourceCode && row.sourceCode) {
+        byId.set(existingId, { ...current, sourceCode: row.sourceCode });
       }
       continue;
     }
-    byId.set(row.id, standardFromCatalog(row));
+    byId.set(id, standardFromCatalog({ ...row, id }));
   }
-  return [...byId.values()];
+  return [...byId.values()]
+    .map(overlayKnownFactory)
+    .filter((row) => !isRetiredLaunchStandard(row));
 }
 
 export async function fetchCatalog(): Promise<{ standards: CatalogStandard[]; status: CatalogStatus }> {
@@ -145,6 +164,17 @@ export async function fetchCatalog(): Promise<{ standards: CatalogStandard[]; st
     return { standards: withSeed(standards), status: "live" };
   } catch {
     return { standards: CATALOG_SEED, status: "local" };
+  }
+}
+
+export async function fetchCatalogStandard(id: string): Promise<CatalogStandard | undefined> {
+  try {
+    const res = await fetch(`/api/standards?id=${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as { standard?: CatalogStandard };
+    return data.standard;
+  } catch {
+    return undefined;
   }
 }
 
@@ -163,6 +193,31 @@ export async function publishToCatalog(entry: CatalogStandard): Promise<CatalogS
 }
 
 function withSeed(list: CatalogStandard[]): CatalogStandard[] {
-  const ids = new Set(list.map((s) => s.id));
-  return [...CATALOG_SEED.filter((s) => !ids.has(s.id)), ...list];
+  const mandate = CATALOG_SEED.find((s) => s.id === "TSxxx5");
+  const migrated: CatalogStandard[] = [];
+  const seen = new Set<string>();
+  for (const row of list) {
+    const id = canonicalStandardId(row.id);
+    if (isRetiredLaunchStandard({ ...row, id })) {
+      if (mandate && !seen.has("TSxxx5")) {
+        migrated.push({ ...mandate });
+        seen.add("TSxxx5");
+      }
+      continue;
+    }
+    if (id === "TSxxx5" && mandate) {
+      if (!seen.has("TSxxx5")) {
+        migrated.push({ ...mandate, publishedAt: row.publishedAt || 0 });
+        seen.add("TSxxx5");
+      }
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    migrated.push({ ...row, id });
+  }
+  const ids = new Set(migrated.map((s) => s.id));
+  const programs = new Set(migrated.map((s) => s.programId));
+  const seed = CATALOG_SEED.filter((s) => !ids.has(s.id) && !programs.has(s.programId));
+  return [...seed, ...migrated];
 }

@@ -60,16 +60,32 @@ function catalogDevPlugin(): Plugin {
             return;
           }
           if (req.method === "GET") {
-            json(res, 200, { standards: withSeed(await load()) });
+            const list = withSeed(await load());
+            const url = new URL(req.url ?? "/", "http://earth.local");
+            const id = url.searchParams.get("id");
+            if (id) {
+              const standard = list.find((s) => s.id === id);
+              if (!standard) {
+                json(res, 404, { error: "Standard not found." });
+                return;
+              }
+              json(res, 200, { standard });
+              return;
+            }
+            json(res, 200, { standards: list });
             return;
           }
           if (req.method === "POST") {
             const chunks: Buffer[] = [];
             for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            let entry: (typeof CATALOG_SEED)[number];
+            let entry: (typeof CATALOG_SEED)[number] & {
+              sourceCode?: { filename: string; code: string };
+            };
             try {
-              const raw = JSON.parse(Buffer.concat(chunks).toString("utf8")) as (typeof CATALOG_SEED)[number];
+              const raw = JSON.parse(Buffer.concat(chunks).toString("utf8")) as typeof entry;
               if (!raw?.id || !raw?.name || !raw?.programId) throw new Error("Invalid standard.");
+              const code = typeof raw.sourceCode?.code === "string" ? raw.sourceCode.code.replace(/\r\n/g, "\n") : "";
+              if (!code.trim()) throw new Error("Upload the token contract source. It is public.");
               entry = {
                 id: String(raw.id),
                 name: String(raw.name).slice(0, 64),
@@ -79,6 +95,10 @@ function catalogDevPlugin(): Plugin {
                 notes: String(raw.notes ?? "").slice(0, 400),
                 publisher: raw.publisher,
                 publishedAt: Date.now(),
+                sourceCode: {
+                  filename: String(raw.sourceCode?.filename ?? "lib.rs").slice(0, 80),
+                  code: code.slice(0, 100_000),
+                },
               };
             } catch (err) {
               json(res, 400, { error: err instanceof Error ? err.message : "Invalid standard." });

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Mark } from "./Mark.tsx";
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error?: string }> {
   state: { error?: string } = {};
@@ -15,7 +16,10 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error?: 
     if (this.state.error) {
       return (
         <div className="shell">
-          <h1 style={{ fontFamily: "Fraunces, Georgia, serif", letterSpacing: "-0.04em" }}>Earth</h1>
+          <div className="brand" style={{ marginBottom: 16 }}>
+            <Mark size={48} />
+            <h1 style={{ fontFamily: "Fraunces, Georgia, serif", letterSpacing: "-0.04em" }}>Earth</h1>
+          </div>
           <p className="notice alert">{this.state.error}</p>
           <button type="button" className="primary" onClick={() => this.setState({ error: undefined })}>
             Try again

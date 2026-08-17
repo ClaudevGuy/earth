@@ -7,6 +7,7 @@ export interface CatalogShare {
   programId: string;
   amountWidth: AmountWidth;
   notes: string;
+  sourceCode?: { filename: string; code: string };
 }
 
 export function decodeShareCode(code: string): CatalogShare {
@@ -27,6 +28,10 @@ export function decodeShareCode(code: string): CatalogShare {
       programId: String(parsed.programId),
       amountWidth: parsed.amountWidth,
       notes: String(parsed.notes ?? "Adopted from a share code. Unverified — not an audit."),
+      sourceCode:
+        parsed.sourceCode && typeof parsed.sourceCode === "object" && typeof parsed.sourceCode.code === "string"
+          ? { filename: String(parsed.sourceCode.filename ?? "lib.rs"), code: parsed.sourceCode.code }
+          : undefined,
     };
   } catch (err) {
     if (err instanceof Error && /share code|incomplete/i.test(err.message)) throw err;

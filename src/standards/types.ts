@@ -19,7 +19,7 @@ export interface FactorySpec {
   blurb: string;
   defaultDecimals: number;
   variables: VariableDef[];
-  /** Launch curve mints seed an Earth pool from virtual reserves. */
+  /** Unused. Kept so older local listings do not break. */
   autoPool?: boolean;
 }
 

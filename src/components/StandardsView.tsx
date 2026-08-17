@@ -1,15 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EarthState } from "../useEarth";
-import type { AmountWidth, CatalogStandard, CurveKind, PairFocus, StandardKind, TokenStandard } from "../types";
+import type { AmountWidth, CatalogStandard, CurveKind, PairFocus, TokenStandard } from "../types";
 import { catalogFromStandard, mergeStandards, shareUrl } from "../adapters/catalog.ts";
 import { canRemoveStandard, findStandard, reviewChecks } from "../adapters/registry.ts";
+import { defaultVariableValues, findFactory } from "../standards/factories.ts";
+import { configSummary, fillAgentDefaults, parseMintConfig } from "../standards/validate.ts";
 import { shortAddress } from "../lib/format.ts";
-import { WSOL } from "../lib/constants.ts";
+import { STANDARD_CREATE_FEE_USD, WSOL } from "../lib/constants.ts";
+import {
+  quoteStandardCreateBurn,
+  standardCreateFeeHeadline,
+  standardCreateFeeUsdLabel,
+} from "../lib/earthFee.ts";
+import { isLiveEarthProgram } from "../lib/ids.ts";
 import { USDC } from "../data/tokens.ts";
+import { canLockToken } from "../lib/tokenSafety.ts";
 import { TokenAvatar } from "./TokenAvatar.tsx";
+import { FactoryMint } from "./FactoryMint.tsx";
+import { MintVariables } from "./MintVariables.tsx";
+import { LockAuthorities, SafeBadge } from "./LockAuthorities.tsx";
+import { SourceCodeView } from "./SourceCode.tsx";
+import { MAX_SOURCE_CHARS, readSourceFile } from "../standards/source.ts";
 
-type Mode = "browse" | "create";
-type Filter = "all" | "custom" | "native" | "mine";
+type Mode = "browse" | "contract" | "create" | "lock";
+type Filter = "all" | "factory" | "custom" | "native" | "mine";
 
 export function StandardsView({
   earth,
@@ -28,15 +42,12 @@ export function StandardsView({
   const [shareIn, setShareIn] = useState(adoptCode ?? "");
   const [highlight, setHighlight] = useState(focusId);
   const [name, setName] = useState("");
-  const [programId, setProgramId] = useState("");
-  const [kind, setKind] = useState<StandardKind>("custom");
   const [width, setWidth] = useState<AmountWidth>("u128");
   const [notes, setNotes] = useState("");
   const [publish, setPublish] = useState(true);
   const [listFirst, setListFirst] = useState(false);
   const [symbol, setSymbol] = useState("");
   const [tokenName, setTokenName] = useState("");
-  const [mint, setMint] = useState("");
   const [decimals, setDecimals] = useState("18");
   const [makePool, setMakePool] = useState(true);
   const [quoteMint, setQuoteMint] = useState(WSOL);
@@ -51,18 +62,30 @@ export function StandardsView({
   const [addName, setAddName] = useState("");
   const [addMint, setAddMint] = useState("");
   const [addDecimals, setAddDecimals] = useState("9");
+  const [addVars, setAddVars] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [lockMint, setLockMint] = useState<string>();
+  const [sourceName, setSourceName] = useState("lib.rs");
+  const [sourceCode, setSourceCode] = useState("");
 
   const quotes = useMemo(
     () => earth.tokens.filter((t) => t.mint === WSOL || t.mint === USDC),
     [earth.tokens],
   );
+  const createFee = useMemo(
+    () => quoteStandardCreateBurn(earth.tokens, earth.pools),
+    [earth.pools, earth.tokens],
+  );
+  const createFeeLabel = standardCreateFeeUsdLabel();
+  const lockable = useMemo(() => earth.tokens.filter((t) => canLockToken(t)), [earth.tokens]);
+  const selectedLock = lockable.find((t) => t.mint === lockMint) ?? lockable[0];
 
   const visible = useMemo(() => {
     const merged = mergeStandards(earth.standards, earth.catalog);
     const needle = query.trim().toLowerCase();
     return merged
       .filter((std) => {
+        if (filter === "factory") return Boolean(std.factory);
         if (filter === "custom") return std.kind === "custom";
         if (filter === "native") return std.review === "native";
         if (filter === "mine") return Boolean(std.userCreated);
@@ -74,7 +97,8 @@ export function StandardsView({
           std.name.toLowerCase().includes(needle) ||
           std.programId.toLowerCase().includes(needle) ||
           std.notes.toLowerCase().includes(needle) ||
-          std.id.toLowerCase().includes(needle)
+          std.id.toLowerCase().includes(needle) ||
+          (std.sourceCode?.filename.toLowerCase().includes(needle) ?? false)
         );
       })
       .sort((a, b) => {
@@ -86,14 +110,16 @@ export function StandardsView({
 
   useEffect(() => {
     if (!adoptCode) return;
-    try {
-      const adopted = earth.adoptStandard(adoptCode);
-      setHighlight(adopted.id);
-      setShareIn("");
-      setNote(`Added ${adopted.name}. List your own token on it below.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not adopt that standard.");
-    }
+    void earth
+      .adoptStandard(adoptCode)
+      .then((adopted) => {
+        setHighlight(adopted.id);
+        setShareIn("");
+        setNote(`Added ${adopted.name}. Create a contract on it below.`);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Could not adopt that standard.");
+      });
     // adopt once from the inbound link
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adoptCode]);
@@ -110,14 +136,12 @@ export function StandardsView({
     try {
       const result = await earth.launchStandard({
         standardName: name,
-        programId,
         amountWidth: width,
-        kind,
         notes,
         publish,
+        sourceCode: { filename: sourceName, code: sourceCode },
         symbol: listFirst ? symbol : "",
         tokenName,
-        mint,
         decimals: Number(decimals),
         createPool: listFirst && makePool,
         quoteMint,
@@ -131,23 +155,23 @@ export function StandardsView({
         return;
       }
       const where = result.published
-        ? "It is in the public catalog — other users can find it and mint on it."
+        ? "It is in the public catalog — other users can find it and create a contract on it."
         : "Copy the share link from its card so others can find it (catalog publish did not go through).";
       setNote(
         result.token
-          ? `${result.token.symbol} is listed on ${result.standard.name}. ${where}`
-          : `${result.standard.name} is ready. Other users can mint their own tokens on this standard. ${where}`,
+          ? `${result.token.symbol} is listed on ${result.standard.name} (${result.standard.id}). ${where}`
+          : `${result.standard.name} is ready. Standard ID ${result.standard.id}. Earth deploys the program; others can create contracts on this standard. ${where}`,
       );
       setHighlight(result.standard.id);
       setMode("browse");
       setName("");
-      setProgramId("");
       setNotes("");
       setSymbol("");
       setTokenName("");
-      setMint("");
+      setSourceName("lib.rs");
+      setSourceCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not register.");
+      setError(err instanceof Error ? err.message : "Could not create the standard.");
     } finally {
       setBusy(false);
     }
@@ -156,32 +180,38 @@ export function StandardsView({
   function addToken(standardId: string) {
     setError(undefined);
     try {
-      const token = earth.addTokenToStandard(standardId, {
+      const factory = findFactory(standardId);
+      const config = factory ? parseMintConfig(factory, fillAgentDefaults(addVars, earth.wallet)) : undefined;
+      const { token } = earth.addTokenToStandard(standardId, {
         symbol: addSymbol,
         name: addName,
         mint: addMint,
         decimals: Number(addDecimals),
+        config,
       });
       setAddFor(undefined);
       setAddSymbol("");
       setAddName("");
       setAddMint("");
-      setNote(`${token.symbol} listed on this standard. Create a pool from this card when you want a market.`);
+      setAddVars({});
+      setNote(`${token.symbol} listed on this standard. Lock authorities so Trade marks it Safe, or create a pool from this card.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not list token.");
+      setError(err instanceof Error ? err.message : "Could not create the contract.");
     }
   }
 
   function adoptFromBox() {
     setError(undefined);
-    try {
-      const adopted = earth.adoptStandard(shareIn);
-      setShareIn("");
-      setHighlight(adopted.id);
-      setNote(`Added ${adopted.name}. Mint your own token on it.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not read that share code.");
-    }
+    void earth
+      .adoptStandard(shareIn)
+      .then((adopted) => {
+        setShareIn("");
+        setHighlight(adopted.id);
+        setNote(`Added ${adopted.name}. Create a contract on it.`);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Could not read that share code.");
+      });
   }
 
   return (
@@ -190,13 +220,35 @@ export function StandardsView({
         <button type="button" className={mode === "browse" ? "active" : ""} onClick={() => setMode("browse")}>
           Browse standards
         </button>
+        <button type="button" className={mode === "contract" ? "active" : ""} onClick={() => setMode("contract")}>
+          Create a contract
+        </button>
         <button type="button" className={mode === "create" ? "active" : ""} onClick={() => setMode("create")}>
           Create a standard
+        </button>
+        <button type="button" className={mode === "lock" ? "active" : ""} onClick={() => setMode("lock")}>
+          Lock authorities
         </button>
       </div>
 
       {error ? <p className="notice alert">{error}</p> : null}
       {note ? <p className="notice">{note}</p> : null}
+
+      {mode === "contract" ? (
+        <FactoryMint
+          earth={earth}
+          onOpenPair={onOpenPair}
+          onDone={(msg) => {
+            setError(undefined);
+            setNote(msg);
+            setMode("browse");
+          }}
+          onError={(msg) => {
+            setNote(undefined);
+            setError(msg || undefined);
+          }}
+        />
+      ) : null}
 
       {mode === "browse" ? (
         <div className="stack">
@@ -208,19 +260,21 @@ export function StandardsView({
               </span>
             </div>
             <p className="notice">
-              A standard is the program. Anyone can list their own ticker on a published standard. Native SPL and
-              Token-2022 are always here; custom programs appear when their creator publishes them or shares a link.
+              A standard is a program. Mandate (TSxxx5) is the AI-agent factory — open Create a contract and pick that
+              card. Do not look for Launch curve; that row is gone. Use a factory to create a contract in a few fields,
+              or burn {createFeeLabel} for a new standard of your own. Native SPL and Token-2022 stay here.
             </p>
             <input
               className="search-field"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, program ID, or notes"
+              placeholder="Search name, standard ID, or notes"
             />
             <div className="std-filters">
               {(
                 [
                   ["all", "All"],
+                  ["factory", "Factories"],
                   ["custom", "Custom"],
                   ["native", "Native"],
                   ["mine", "Yours"],
@@ -263,11 +317,20 @@ export function StandardsView({
               addName={addName}
               addMint={addMint}
               addDecimals={addDecimals}
-              setAddFor={setAddFor}
+              addVars={addVars}
+              setAddFor={(id) => {
+                setAddFor(id);
+                setAddMint("");
+                const factory = id ? findFactory(id) : undefined;
+                setAddVars(factory ? defaultVariableValues(factory) : {});
+                if (factory) setAddDecimals(String(factory.defaultDecimals));
+                else setAddDecimals(id && findStandard(id, earth.standards)?.amountWidth === "u128" ? "18" : "9");
+              }}
               setAddSymbol={setAddSymbol}
               setAddName={setAddName}
               setAddMint={setAddMint}
               setAddDecimals={setAddDecimals}
+              setAddVars={setAddVars}
               onAddToken={addToken}
               onOpenPair={onOpenPair}
               onCopied={(msg) => {
@@ -275,51 +338,154 @@ export function StandardsView({
                 setNote(msg);
               }}
               onError={setError}
+              onLock={(mint) => {
+                setLockMint(mint);
+                setMode("lock");
+              }}
             />
           ))}
         </div>
-      ) : (
+      ) : null}
+
+      {mode === "lock" ? (
+        <div className="swap-grid">
+          <aside className="panel pad stack">
+            <div className="panel-head">
+              <span>Your tokens</span>
+              <span className="pill">{lockable.length}</span>
+            </div>
+            <p className="notice">
+              Lock supply, revoke freeze, and freeze metadata. When all three are done, Trade marks the ticker Safe —
+              supply and name cannot be changed.
+            </p>
+            {lockable.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Create a contract first. Built-in listings like SOL cannot be locked from here.
+              </p>
+            ) : (
+              <div className="lock-pick">
+                {lockable.map((token) => (
+                  <button
+                    key={token.mint}
+                    type="button"
+                    className={`factory-card${selectedLock?.mint === token.mint ? " active" : ""}`}
+                    onClick={() => setLockMint(token.mint)}
+                  >
+                    <strong>
+                      {token.symbol} <SafeBadge token={token} />
+                    </strong>
+                    <span>{token.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
+          <section className="panel pad stack">
+            {selectedLock ? (
+              <LockAuthorities
+                earth={earth}
+                token={selectedLock}
+                onDone={(msg) => {
+                  setError(undefined);
+                  setNote(msg);
+                }}
+                onError={(msg) => {
+                  setNote(undefined);
+                  setError(msg || undefined);
+                }}
+              />
+            ) : (
+              <>
+                <div className="panel-head">
+                  <span>Lock authorities</span>
+                </div>
+                <p className="lede">Create a contract on a factory or standard, then lock it here so traders see Safe.</p>
+                <div className="row-actions">
+                  <button type="button" className="primary" onClick={() => setMode("contract")}>
+                    Create a contract
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {mode === "create" ? (
         <div className="swap-grid">
           <aside className="panel pad stack">
             <div className="panel-head">
               <span>New standard</span>
             </div>
             <p className="notice">
-              Name the program others will mint against. Publishing puts it in the Earth catalog. Leave program ID
-              blank for a local preview. This is not an audit.
+              Upload the token contract source. It is public — anyone who finds this standard can read it. Earth assigns
+              a Standard ID and deploys the program. Listing it burns {createFeeLabel}. You never paste a program ID.
             </p>
             <label>
               Standard name
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meridian" />
             </label>
             <label>
-              Program ID <span style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span>
-              <input value={programId} onChange={(e) => setProgramId(e.target.value)} placeholder="On-chain program, or blank" />
+              Amount size
+              <select
+                value={width}
+                onChange={(e) => {
+                  const next = e.target.value as AmountWidth;
+                  setWidth(next);
+                  if (next === "u64" && Number(decimals) > 12) setDecimals("9");
+                  if (next === "u64") setAmountBase("1000");
+                  if (next === "u128") setAmountBase("1000000");
+                }}
+              >
+                <option value="u128">Large (u128) — 18-decimal supplies SPL cannot hold</option>
+                <option value="u64">Normal (u64) — same size as SPL</option>
+              </select>
             </label>
-            <div className="form-grid">
-              <label>
-                Kind
-                <select value={kind} onChange={(e) => setKind(e.target.value as StandardKind)}>
-                  <option value="custom">custom</option>
-                  <option value="token-2022">token-2022</option>
-                  <option value="spl-token">spl-token</option>
-                </select>
+            <div className="source-upload">
+              <div className="source-upload-head">
+                <span>Token contract source</span>
+                <span className="pill">required · public</span>
+              </div>
+              <p className="notice">
+                Upload or paste the program source (typically <span className="mono">lib.rs</span>). Everyone who opens
+                this standard can read it. Max {MAX_SOURCE_CHARS.toLocaleString()} characters. Not a binary or{" "}
+                <span className="mono">.so</span>.
+              </p>
+              <label className="source-file">
+                Upload file
+                <input
+                  type="file"
+                  accept=".rs,.toml,.txt,.sol,.md"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void readSourceFile(file)
+                      .then((parsed) => {
+                        setError(undefined);
+                        setSourceName(parsed.filename);
+                        setSourceCode(parsed.code);
+                      })
+                      .catch((err: unknown) => {
+                        setError(err instanceof Error ? err.message : "Could not read that file.");
+                      });
+                    e.target.value = "";
+                  }}
+                />
               </label>
               <label>
-                Amount width
-                <select
-                  value={width}
-                  onChange={(e) => {
-                    const next = e.target.value as AmountWidth;
-                    setWidth(next);
-                    if (next === "u64" && Number(decimals) > 12) setDecimals("9");
-                    if (next === "u64") setAmountBase("1000");
-                    if (next === "u128") setAmountBase("1000000");
-                  }}
-                >
-                  <option value="u128">u128</option>
-                  <option value="u64">u64</option>
-                </select>
+                Filename
+                <input value={sourceName} onChange={(e) => setSourceName(e.target.value)} placeholder="lib.rs" />
+              </label>
+              <label>
+                Source
+                <textarea
+                  className="source-editor"
+                  value={sourceCode}
+                  onChange={(e) => setSourceCode(e.target.value)}
+                  placeholder={"use solana_program::{account_info::AccountInfo, entrypoint, pubkey::Pubkey};\n\nentrypoint!(process_instruction);\n\nfn process_instruction(\n    _program_id: &Pubkey,\n    _accounts: &[AccountInfo],\n    _data: &[u8],\n) -> Result<(), u64> {\n    Ok(())\n}"}
+                  rows={14}
+                  spellCheck={false}
+                />
               </label>
             </div>
             <label>
@@ -327,17 +493,32 @@ export function StandardsView({
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="What this program stores and who should mint on it"
-                rows={3}
+                placeholder="What this standard is for"
+                rows={2}
               />
             </label>
+            <div className="fee-callout">
+              <strong>{standardCreateFeeHeadline(createFee)}</strong>
+              <span>
+                Burned to list this standard — not paid to Earth. Earth deploys the source you uploaded.
+                {createFee.priced
+                  ? ` Quoted at the current $EARTH price for $${STANDARD_CREATE_FEE_USD.toLocaleString()}.`
+                  : ` Amount in $EARTH is quoted from the live price when $EARTH is trading.`}
+                {createFee.mintSet
+                  ? " No $EARTH is taken in this protocol preview."
+                  : " $EARTH is not live yet, so nothing is taken in this protocol preview."}
+                {earth.wallet
+                  ? ` When the burn is live, it comes from ${shortAddress(earth.wallet, 4)}.`
+                  : " Connect Earth Wallet so the burn can come from your account when $EARTH is live."}
+              </span>
+            </div>
             <label className="check-row">
               <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} />
               Publish so other users can find this standard
             </label>
             <label className="check-row">
               <input type="checkbox" checked={listFirst} onChange={(e) => setListFirst(e.target.checked)} />
-              Also list my first token now
+              Also create my first contract now
             </label>
             {listFirst ? (
               <>
@@ -349,16 +530,10 @@ export function StandardsView({
                   Token name
                   <input value={tokenName} onChange={(e) => setTokenName(e.target.value)} placeholder="Meridian" />
                 </label>
-                <div className="form-grid">
-                  <label>
-                    Decimals
-                    <input value={decimals} onChange={(e) => setDecimals(e.target.value)} />
-                  </label>
-                  <label>
-                    Mint <span style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span>
-                    <input value={mint} onChange={(e) => setMint(e.target.value)} placeholder="Blank = preview mint" />
-                  </label>
-                </div>
+                <label>
+                  Decimals
+                  <input value={decimals} onChange={(e) => setDecimals(e.target.value)} />
+                </label>
                 <label className="check-row">
                   <input type="checkbox" checked={makePool} onChange={(e) => setMakePool(e.target.checked)} />
                   Create a pool now
@@ -402,27 +577,38 @@ export function StandardsView({
                 ) : null}
               </>
             ) : null}
-            <button type="button" className="primary" onClick={() => void launch()} disabled={busy}>
-              {listFirst && makePool ? "Create standard, token, and pool" : "Create standard"}
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void launch()}
+              disabled={busy || !name.trim() || !sourceCode.trim()}
+            >
+              {listFirst && makePool
+                ? "Create standard, contract, and pool"
+                : listFirst
+                  ? "Create standard and contract"
+                  : "Create standard"}
             </button>
           </aside>
           <section className="panel pad stack">
             <div className="panel-head">
-              <span>What others get</span>
+              <span>What you burn</span>
             </div>
             <p className="muted" style={{ margin: 0, fontSize: 13, letterSpacing: 0, textTransform: "none" }}>
-              Publishing a standard does not mint supply for you. It registers the adapter: name, program, kind, and
-              amount width. Anyone who finds it can list their own ticker, then open a pool. Tokens you list stay in
-              this browser until the on-chain program is live.
+              A new standard is a new program. You upload the source; it stays visible on the public card. Earth deploys
+              it and holds upgrade authority. You burn {createFeeLabel} and pick the name plus amount size. Anyone who
+              finds it can create their own contract on it. This is not an audit.
             </p>
             <ul className="std-points">
-              <li>Custom u128 programs can hold supplies SPL cannot.</li>
-              <li>Unverified means allowlisted here, not audited.</li>
+              <li>Source is required and public. There is no private custom standard.</li>
+              <li>You never paste a program ID. Earth assigns it.</li>
+              <li>Listing your own standard burns {createFeeLabel}. Creating a contract on a factory or someone else’s standard does not.</li>
+              <li>Large (u128) standards can hold supplies SPL cannot.</li>
               <li>Share the card link if the public catalog is unavailable.</li>
             </ul>
           </section>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -436,15 +622,18 @@ function StandardCard({
   addName,
   addMint,
   addDecimals,
+  addVars,
   setAddFor,
   setAddSymbol,
   setAddName,
   setAddMint,
   setAddDecimals,
+  setAddVars,
   onAddToken,
   onOpenPair,
   onCopied,
   onError,
+  onLock,
 }: {
   std: TokenStandard;
   earth: EarthState;
@@ -454,15 +643,18 @@ function StandardCard({
   addName: string;
   addMint: string;
   addDecimals: string;
+  addVars: Record<string, string>;
   setAddFor: (id?: string) => void;
   setAddSymbol: (v: string) => void;
   setAddName: (v: string) => void;
   setAddMint: (v: string) => void;
   setAddDecimals: (v: string) => void;
+  setAddVars: (v: Record<string, string>) => void;
   onAddToken: (id: string) => void;
   onOpenPair: (page: "swap" | "liquidity" | "trade", focus: PairFocus) => void;
   onCopied: (msg: string) => void;
   onError: (msg: string) => void;
+  onLock: (mint: string) => void;
 }) {
   const listed = earth.tokens.filter((t) => t.standardId === std.id);
   const local = findStandard(std.id, earth.standards);
@@ -474,6 +666,7 @@ function StandardCard({
       <div className="panel-head">
         <span>{std.name}</span>
         <span>
+          {std.factory ? <span className="pill">factory</span> : null}{" "}
           {std.userCreated ? <span className="pill">yours</span> : null}{" "}
           {inCatalog || std.source === "catalog" || std.source === "seeded" ? <span className="pill">public</span> : null}{" "}
           <span className={`pill${std.review === "unverified" ? " warn" : ""}`}>{std.review}</span>{" "}
@@ -483,8 +676,21 @@ function StandardCard({
       <p className="muted" style={{ margin: 0, fontSize: 13, letterSpacing: 0, textTransform: "none" }}>
         {std.notes}
       </p>
-      <div className="mono muted">{shortAddress(std.programId, 8)}</div>
+      <div className="std-id mono">Standard ID {std.id}</div>
+      <div className="muted">
+        {std.kind === "custom" && !isLiveEarthProgram(std.programId)
+          ? "Earth deploys this program"
+          : shortAddress(std.programId, 8)}
+      </div>
       {std.publisher ? <div className="muted">Publisher {shortAddress(std.publisher, 4)}</div> : null}
+      <SourceCodeView
+        source={std.sourceCode}
+        empty={
+          std.kind === "custom"
+            ? "No public source on this standard yet. New standards require it."
+            : undefined
+        }
+      />
       {reviewChecks(std)
         .slice(0, 2)
         .map((check) => (
@@ -494,18 +700,23 @@ function StandardCard({
         ))}
       <div>
         {listed.length === 0 ? (
-          <p className="notice">No tokens listed in this browser yet. Mint one on this standard.</p>
+          <p className="notice">No contracts on this standard in this browser yet. Create one below.</p>
         ) : (
           listed.map((token) => {
             const pooled = earth.pools.filter((p) => p.tokenA === token.mint || p.tokenB === token.mint);
             return (
               <div key={token.mint} className="listed-token">
                 <div className="listed-token-main">
-                  <TokenAvatar symbol={token.symbol} size={32} />
+                  <TokenAvatar symbol={token.symbol} logo={token.logo} size={32} />
                   <div>
-                    <strong>{token.symbol}</strong>
+                    <strong>
+                      {token.symbol} <SafeBadge token={token} />
+                    </strong>
                     <div className="muted">
                       {token.name} · {token.decimals} decimals
+                      {configSummary(token.config).length
+                        ? ` · ${configSummary(token.config).join(" · ")}`
+                        : ""}
                     </div>
                   </div>
                 </div>
@@ -532,6 +743,11 @@ function StandardCard({
                       Create pool
                     </button>
                   )}
+                  {canLockToken(token) ? (
+                    <button type="button" className="ghost" onClick={() => onLock(token.mint)}>
+                      Lock
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );
@@ -554,13 +770,26 @@ function StandardCard({
             Token name
             <input value={addName} onChange={(e) => setAddName(e.target.value)} />
           </label>
-          <label>
-            Mint (optional)
-            <input value={addMint} onChange={(e) => setAddMint(e.target.value)} />
-          </label>
+          {findFactory(std.id) ? (
+            <MintVariables
+              factory={findFactory(std.id)!}
+              values={addVars}
+              onChange={(key, value) => setAddVars({ ...addVars, [key]: value })}
+            />
+          ) : null}
+          {std.kind === "spl-token" || std.kind === "token-2022" ? (
+            <label>
+              Contract address <span style={{ textTransform: "none", letterSpacing: 0 }}>(optional)</span>
+              <input
+                value={addMint}
+                onChange={(e) => setAddMint(e.target.value)}
+                placeholder="Blank = Earth assigns one"
+              />
+            </label>
+          ) : null}
           <div className="row-actions" style={{ marginTop: 0 }}>
             <button type="button" className="primary" onClick={() => onAddToken(std.id)}>
-              Mint token
+              Create contract
             </button>
             <button type="button" className="ghost" onClick={() => setAddFor(undefined)}>
               Cancel
@@ -569,11 +798,8 @@ function StandardCard({
         </div>
       ) : (
         <div className="row-actions" style={{ marginTop: 0 }}>
-          <button type="button" className="primary" onClick={() => {
-            setAddFor(std.id);
-            setAddDecimals(std.amountWidth === "u128" ? "18" : "9");
-          }}>
-            Mint a token
+          <button type="button" className="primary" onClick={() => setAddFor(std.id)}>
+            Create a contract
           </button>
           <button
             type="button"
@@ -581,7 +807,7 @@ function StandardCard({
             onClick={() => {
               const url = shareUrl(entry);
               void navigator.clipboard.writeText(url).then(
-                () => onCopied(`Share link copied for ${std.name}. Anyone with it can mint on this standard.`),
+                () => onCopied(`Share link copied for ${std.name}. Anyone with it can create a contract on this standard.`),
                 () => onCopied(url),
               );
             }}

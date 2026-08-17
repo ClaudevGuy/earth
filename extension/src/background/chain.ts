@@ -2,13 +2,14 @@ import "../shared/polyfill";
 import { Buffer } from "buffer";
 import {
   Connection,
+  Keypair,
   PublicKey,
   SystemProgram,
   Transaction,
   TransactionInstruction,
   VersionedTransaction,
-  type Keypair,
 } from "@solana/web3.js";
+import type { WalletKeypair } from "../shared/crypto";
 import {
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -27,9 +28,10 @@ import {
   getTokenMetadata,
 } from "@solana/spl-token";
 import { BUILTIN_TOKENS, findStandard, findToken, isOnChainProgramId } from "../shared/adapters";
-import { WSOL } from "../shared/constants";
-import { assertFits, base64ToBytes, bytesToBase64 } from "../shared/format";
-import type { ListedToken, TokenBalance, TokenStandard } from "../shared/types";
+import { PROTOCOL_FEE_ADDRESS, PROTOCOL_FEE_BPS, WSOL } from "../shared/constants";
+import { assertFits, base64ToBytes, bytesToBase64, splitProtocolFee } from "../shared/format";
+import type { Collectible, ListedToken, TokenBalance, TokenStandard } from "../shared/types";
+import { enrichCollectibles, isCollectibleMint } from "./collectibles";
 
 const EXT_NAMES: Partial<Record<ExtensionType, string>> = {
   [ExtensionType.TransferFeeConfig]: "transfer-fee",
@@ -77,15 +79,21 @@ function labelForMint(mint: string, listed: ListedToken[]): { symbol: string; na
   return { symbol: mint.slice(0, 4).toUpperCase(), name: mint, decimals: 0 };
 }
 
-export async function fetchBalances(
+export async function fetchHoldings(
   rpcUrl: string,
   owner: string,
   standards: TokenStandard[],
   listed: ListedToken[],
-): Promise<TokenBalance[]> {
+): Promise<{ tokens: TokenBalance[]; collectibles: Collectible[] }> {
   const connection = new Connection(rpcUrl, "confirmed");
-  const ownerKey = new PublicKey(owner);
+  let ownerKey: PublicKey;
+  try {
+    ownerKey = new PublicKey(owner);
+  } catch {
+    throw new Error("Wallet address is invalid. Re-import the 12 or 24 word seed phrase.");
+  }
   const rows: TokenBalance[] = [];
+  const collectibles: Collectible[] = [];
   const seen = new Set<string>();
 
   const sol = await connection.getBalance(ownerKey);
@@ -154,6 +162,16 @@ export async function fetchBalances(
             /* metadata is optional */
           }
         }
+        if (isCollectibleMint(info.tokenAmount.decimals, info.tokenAmount.amount)) {
+          collectibles.push({
+            mint: info.mint,
+            name: meta.name,
+            symbol: meta.symbol,
+            amount: info.tokenAmount.amount,
+          });
+          seen.add(info.mint);
+          continue;
+        }
         rows.push({
           mint: info.mint,
           symbol: meta.symbol,
@@ -179,7 +197,12 @@ export async function fetchBalances(
   for (const standard of standards.filter((s) => s.kind === "custom")) {
     if (!isOnChainProgramId(standard.programId)) continue;
     try {
-      const programId = new PublicKey(standard.programId);
+      let programId: PublicKey;
+      try {
+        programId = new PublicKey(standard.programId);
+      } catch {
+        continue;
+      }
       const accounts = await connection.getProgramAccounts(programId, {
         filters: [{ memcmp: { offset: 32, bytes: owner } }],
       });
@@ -227,73 +250,149 @@ export async function fetchBalances(
     });
   }
 
-  return rows;
+  return {
+    tokens: rows,
+    collectibles: await enrichCollectibles(rpcUrl, owner, collectibles),
+  };
+}
+
+const PROTOCOL_FEE_OWNER = new PublicKey(PROTOCOL_FEE_ADDRESS);
+
+async function shouldCollectSolFee(connection: Connection, feeLamports: bigint): Promise<boolean> {
+  if (feeLamports <= 0n) return false;
+  const info = await connection.getAccountInfo(PROTOCOL_FEE_OWNER, "confirmed");
+  if (info) return true;
+  const rent = BigInt(await connection.getMinimumBalanceForRentExemption(0));
+  return feeLamports >= rent;
+}
+
+function appendSplTransfer(
+  tx: Transaction,
+  payer: PublicKey,
+  destOwner: PublicKey,
+  mint: PublicKey,
+  amount: bigint,
+  programId: PublicKey,
+  decimals: number,
+  mintTransferFee: bigint | null,
+) {
+  const source = getAssociatedTokenAddressSync(mint, payer, false, programId);
+  const destination = getAssociatedTokenAddressSync(mint, destOwner, false, programId);
+  tx.add(createAssociatedTokenAccountIdempotentInstruction(payer, destination, destOwner, mint, programId));
+  if (mintTransferFee != null) {
+    tx.add(
+      createTransferCheckedWithFeeInstruction(
+        source,
+        mint,
+        destination,
+        payer,
+        amount,
+        decimals,
+        mintTransferFee,
+        [],
+        programId,
+      ),
+    );
+    return;
+  }
+  tx.add(
+    createTransferCheckedInstruction(source, mint, destination, payer, amount, decimals, [], programId),
+  );
+}
+
+function adapterTransferIx(
+  programId: PublicKey,
+  source: PublicKey,
+  destAcc: PublicKey,
+  mint: PublicKey,
+  payer: PublicKey,
+  amount: bigint,
+): TransactionInstruction {
+  const data = new Uint8Array(17);
+  data[0] = 1;
+  data.set(writeU128LE(amount), 1);
+  return new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: destAcc, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: payer, isSigner: true, isWritable: false },
+    ],
+    data: Buffer.from(data),
+  });
 }
 
 export async function sendFunds(input: {
   rpcUrl: string;
-  keypair: Keypair;
+  keypair: WalletKeypair;
   to: string;
   mint: string;
   amount: bigint;
   standard: TokenStandard;
   nativeSol?: boolean;
 }): Promise<string> {
+  const keypair = Keypair.fromSecretKey(input.keypair.secretKey);
   const dest = new PublicKey(input.to);
   const connection = new Connection(input.rpcUrl, "confirmed");
   assertFits(input.amount, input.standard.amountWidth);
   if (input.amount <= 0n) throw new Error("Amount must be positive.");
 
+  const { net, fee: protocolFee } = splitProtocolFee(input.amount, PROTOCOL_FEE_BPS);
+  const collectProtocol = protocolFee > 0n && !dest.equals(PROTOCOL_FEE_OWNER);
+
   const tx = new Transaction();
-  const payer = input.keypair.publicKey;
+  const payer = keypair.publicKey;
 
   if (input.nativeSol) {
-    tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: dest, lamports: input.amount }));
+    const takeFee = collectProtocol && (await shouldCollectSolFee(connection, protocolFee));
+    tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: dest, lamports: takeFee ? net : input.amount }));
+    if (takeFee) {
+      tx.add(SystemProgram.transfer({ fromPubkey: payer, toPubkey: PROTOCOL_FEE_OWNER, lamports: protocolFee }));
+    }
   } else if (input.standard.kind === "spl-token" || input.standard.kind === "token-2022") {
     const programId = input.standard.kind === "token-2022" ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
     const mint = new PublicKey(input.mint);
     const mintInfo = await getMint(connection, mint, "confirmed", programId);
-    const source = getAssociatedTokenAddressSync(mint, payer, false, programId);
-    const destination = getAssociatedTokenAddressSync(mint, dest, false, programId);
-    tx.add(createAssociatedTokenAccountIdempotentInstruction(payer, destination, dest, mint, programId));
     const feeConfig = input.standard.kind === "token-2022" ? getTransferFeeConfig(mintInfo) : null;
+    let epoch = 0n;
     if (feeConfig) {
-      const epoch = await connection.getEpochInfo();
-      const actual =
-        epoch.epoch >= feeConfig.newerTransferFee.epoch ? feeConfig.newerTransferFee : feeConfig.olderTransferFee;
-      const fee = calculateFee(actual, input.amount);
-      tx.add(
-        createTransferCheckedWithFeeInstruction(
-          source,
-          mint,
-          destination,
-          payer,
-          input.amount,
-          mintInfo.decimals,
-          fee,
-          [],
-          programId,
-        ),
-      );
-    } else {
-      tx.add(
-        createTransferCheckedInstruction(
-          source,
-          mint,
-          destination,
-          payer,
-          input.amount,
-          mintInfo.decimals,
-          [],
-          programId,
-        ),
+      epoch = BigInt((await connection.getEpochInfo()).epoch);
+    }
+    const mintFeeFor = (amount: bigint) => {
+      if (!feeConfig) return null;
+      const actual = epoch >= feeConfig.newerTransferFee.epoch ? feeConfig.newerTransferFee : feeConfig.olderTransferFee;
+      return calculateFee(actual, amount);
+    };
+    const recipientAmount = collectProtocol ? net : input.amount;
+    appendSplTransfer(
+      tx,
+      payer,
+      dest,
+      mint,
+      recipientAmount,
+      programId,
+      mintInfo.decimals,
+      mintFeeFor(recipientAmount),
+    );
+    if (collectProtocol) {
+      appendSplTransfer(
+        tx,
+        payer,
+        PROTOCOL_FEE_OWNER,
+        mint,
+        protocolFee,
+        programId,
+        mintInfo.decimals,
+        mintFeeFor(protocolFee),
       );
     }
   } else {
     if (!isOnChainProgramId(input.standard.programId)) {
-      throw new Error("This adapter has no on-chain program yet. Trade it on Earth, or register a live program ID.");
+      throw new Error("This adapter has no on-chain program yet. Earth deploys it when you burn $EARTH to list a standard on the Earth site.");
     }
     const programId = new PublicKey(input.standard.programId);
+    const mintKey = new PublicKey(input.mint);
     const owned = await connection.getProgramAccounts(programId, {
       filters: [{ memcmp: { offset: 32, bytes: payer.toBase58() } }],
     });
@@ -306,60 +405,68 @@ export async function sendFunds(input: {
     if (!destAcc) {
       throw new Error("Recipient has no account on this standard yet. They need an Earth-compatible wallet.");
     }
-    const data = new Uint8Array(17);
-    data[0] = 1;
-    data.set(writeU128LE(input.amount), 1);
+    let feeAcc: (typeof destOwned)[number] | undefined;
+    if (collectProtocol) {
+      const feeOwned = await connection.getProgramAccounts(programId, {
+        filters: [{ memcmp: { offset: 32, bytes: PROTOCOL_FEE_OWNER.toBase58() } }],
+      });
+      feeAcc = feeOwned.find((item) => new PublicKey(item.account.data.subarray(0, 32)).toBase58() === input.mint);
+    }
+    const takeFee = Boolean(collectProtocol && feeAcc);
     tx.add(
-      new TransactionInstruction({
+      adapterTransferIx(
         programId,
-        keys: [
-          { pubkey: source.pubkey, isSigner: false, isWritable: true },
-          { pubkey: destAcc.pubkey, isSigner: false, isWritable: true },
-          { pubkey: new PublicKey(input.mint), isSigner: false, isWritable: false },
-          { pubkey: payer, isSigner: true, isWritable: false },
-        ],
-        data: Buffer.from(data),
-      }),
+        source.pubkey,
+        destAcc.pubkey,
+        mintKey,
+        payer,
+        takeFee ? net : input.amount,
+      ),
     );
+    if (takeFee && feeAcc) {
+      tx.add(adapterTransferIx(programId, source.pubkey, feeAcc.pubkey, mintKey, payer, protocolFee));
+    }
   }
 
   tx.feePayer = payer;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-  tx.sign(input.keypair);
+  tx.sign(keypair);
   const signature = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false });
   await connection.confirmTransaction(signature, "confirmed");
   return signature;
 }
 
-export async function signEncodedTransaction(keypair: Keypair, encoded: string): Promise<string> {
+export async function signEncodedTransaction(keypair: WalletKeypair, encoded: string): Promise<string> {
+  const signer = Keypair.fromSecretKey(keypair.secretKey);
   const bytes = base64ToBytes(encoded);
   try {
     const tx = VersionedTransaction.deserialize(bytes);
-    tx.sign([keypair]);
+    tx.sign([signer]);
     return bytesToBase64(tx.serialize());
   } catch {
     const tx = Transaction.from(bytes);
-    tx.partialSign(keypair);
+    tx.partialSign(signer);
     return bytesToBase64(tx.serialize({ requireAllSignatures: false }));
   }
 }
 
 export async function signAndSendEncoded(
   rpcUrl: string,
-  keypair: Keypair,
+  keypair: WalletKeypair,
   encoded: string,
 ): Promise<{ signature: string; signed: string }> {
+  const signer = Keypair.fromSecretKey(keypair.secretKey);
   const bytes = base64ToBytes(encoded);
   const connection = new Connection(rpcUrl, "confirmed");
   try {
     const tx = VersionedTransaction.deserialize(bytes);
-    tx.sign([keypair]);
+    tx.sign([signer]);
     const raw = tx.serialize();
     const signature = await connection.sendRawTransaction(raw);
     return { signature, signed: bytesToBase64(raw) };
   } catch {
     const tx = Transaction.from(bytes);
-    tx.partialSign(keypair);
+    tx.partialSign(signer);
     const raw = tx.serialize({ requireAllSignatures: false });
     const signature = await connection.sendRawTransaction(raw);
     return { signature, signed: bytesToBase64(raw) };

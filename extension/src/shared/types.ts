@@ -1,6 +1,17 @@
 export type AmountWidth = "u64" | "u128";
 export type StandardKind = "spl-token" | "token-2022" | "custom";
 export type ReviewStatus = "native" | "registered" | "unverified";
+export type FactoryKind =
+  | "memecoin"
+  | "reflect"
+  | "confidential"
+  | "vesting"
+  | "agent"
+  | "kernel"
+  | "proxy"
+  | "flash"
+  | "chamber"
+  | "launch";
 
 export interface TokenStandard {
   id: string;
@@ -14,6 +25,8 @@ export interface TokenStandard {
   source?: "native" | "seeded" | "created" | "catalog";
   published?: boolean;
   publisher?: string;
+  factory?: FactoryKind;
+  sourceCode?: { filename: string; code: string };
 }
 
 export interface ListedToken {
@@ -23,6 +36,7 @@ export interface ListedToken {
   decimals: number;
   standardId: string;
   tags?: string[];
+  config?: Record<string, string | number | boolean>;
 }
 
 export interface TokenBalance {
@@ -54,15 +68,37 @@ export interface ActivityItem {
   at: number;
 }
 
+export interface WalletAccountInfo {
+  id: string;
+  name: string;
+  address: string;
+  kind: "derived" | "imported";
+}
+
+export interface Collectible {
+  mint: string;
+  name: string;
+  symbol?: string;
+  image?: string;
+  collection?: string;
+  amount: string;
+  compressed?: boolean;
+}
+
 export interface PublicWalletState {
   hasVault: boolean;
   unlocked: boolean;
   address?: string;
   rpcUrl: string;
   autoLockMinutes: number;
+  catalogUrl: string;
   standards: TokenStandard[];
   tokens: ListedToken[];
   balances: TokenBalance[];
+  collectibles: Collectible[];
+  accounts: WalletAccountInfo[];
+  activeAccountId?: string;
+  solDomain?: string;
   sites: ConnectedSite[];
   activity: ActivityItem[];
   pendingBackup?: boolean;

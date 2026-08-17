@@ -3,6 +3,7 @@ import type { ListedToken, TokenStandard } from "../types";
 import { findStandard } from "../adapters/registry";
 import { shortAddress } from "../lib/format";
 import { TokenAvatar } from "./TokenAvatar.tsx";
+import { SafeBadge } from "./LockAuthorities.tsx";
 
 export function TokenSelect({
   tokens,
@@ -35,7 +36,7 @@ export function TokenSelect({
   return (
     <>
       <button type="button" className="token-pick" onClick={() => setOpen(true)}>
-        <TokenAvatar symbol={value.symbol} size={28} />
+        <TokenAvatar symbol={value.symbol} logo={value.logo} size={28} />
         <span>
           <strong>{value.symbol}</strong>
           <small>{standard?.name ?? value.standardId}</small>
@@ -73,9 +74,11 @@ export function TokenSelect({
                     }}
                   >
                     <span className="token-option-main">
-                      <TokenAvatar symbol={token.symbol} size={32} />
+                      <TokenAvatar symbol={token.symbol} logo={token.logo} size={32} />
                       <span>
-                        <strong>{token.symbol}</strong>
+                        <strong>
+                          {token.symbol} <SafeBadge token={token} />
+                        </strong>
                         <div className="muted">{token.name}</div>
                       </span>
                     </span>

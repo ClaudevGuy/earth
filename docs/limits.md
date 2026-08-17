@@ -9,6 +9,9 @@ The website runs complete CPMM + stable math, routing (including two-hop), and a
 Until `programs/` is deployed and the program ID is wired into the UI:
 
 - Swaps, new pools, and LP add/withdraw do not move mainnet tokens.
+- Factory mints (memecoin, reflect, confidential, vesting, agent, launch) are preview listings plus local transfer rules.
+- Listing a custom token standard will burn $1,000 of $EARTH once the token is live. Preview does not take it yet.
+- Confidential transfers depend on Solana’s ZK ElGamal proof program, which is disabled on mainnet pending audits.
 - Do not send real assets into a “preview mint.”
 - Resetting site data or **Reset seed liquidity** wipes local pools.
 
@@ -28,11 +31,11 @@ Until `programs/` is deployed and the program ID is wired into the UI:
 ## Indexer
 
 - Earth pool prices come from local reserves.
-- Optional Pump.fun market caps for SPL mints via `/api/mcaps`.
+- Optional external market caps for SPL mints via `/api/mcaps`.
 - `indexer local` means no remote mcaps; USD may still appear for tokens priced through SOL/USDC Earth pools.
 
 ## Data that never leaves your machine (web app)
 
 Your extra tokens, pools, and LP positions: `localStorage` keys `earth.v1.standards`, `earth.v1.tokens`, `earth.v1.pools`, `earth.v1.lp`.
 
-Publishing a standard (name, program ID, kind, amount width, notes, optional connected wallet as publisher) is sent to `/api/standards` so other users can find it. Uncheck publish to keep a standard only in this browser. Share links encode the same public fields in the URL.
+Publishing a standard (name, public source, Earth-assigned program, kind, amount width, notes, optional connected wallet as publisher) is sent to `/api/standards` so other users can find it and read the code. Uncheck publish to keep a standard only in this browser. Share links encode the public fields in the URL (source is included when it is small enough; otherwise open the catalog card).

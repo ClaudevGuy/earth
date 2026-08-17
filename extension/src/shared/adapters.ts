@@ -1,5 +1,6 @@
 import type { ListedToken, TokenStandard } from "./types";
 import { SPL_TOKEN_PROGRAM, TOKEN_2022_PROGRAM, WSOL } from "./constants";
+import { canonicalStandardId } from "./standardId";
 
 export const NATIVE_STANDARDS: TokenStandard[] = [
   {
@@ -27,10 +28,61 @@ export const CUSTOM_SEED: TokenStandard[] = [
     id: "meridian-u128",
     name: "Meridian (u128)",
     kind: "custom",
-    programId: "MeridianU128Preview11111111111111111111111",
+    programId: "earthprog:meridian-u128",
     amountWidth: "u128",
     review: "registered",
-    notes: "Preview adapter for 128-bit amounts. Earth Wallet will scan the program once it is on-chain.",
+    notes: "Preview adapter for 128-bit amounts. Earth deploys the program; the wallet scans it once it is on-chain.",
+  },
+  {
+    id: "TSxxx1",
+    name: "Memecoin",
+    kind: "custom",
+    programId: "earthprog:memecoin",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "memecoin",
+    notes: "Earth factory. Buy/sell tax, burn, creator fee, max wallet. Create a contract on the Earth site.",
+  },
+  {
+    id: "TSxxx2",
+    name: "Reflect / burn",
+    kind: "custom",
+    programId: "earthprog:reflect",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "reflect",
+    notes: "Earth factory. Reflection, burn, and treasury on every transfer.",
+  },
+  {
+    id: "TSxxx3",
+    name: "Confidential (ZK ElGamal)",
+    kind: "custom",
+    programId: "earthprog:confidential",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "confidential",
+    notes: "Earth factory. Encrypted balances; proofs on ZkE1Gama1Proof11111111111111111111111111111.",
+  },
+  {
+    id: "TSxxx4",
+    name: "Vested lock",
+    kind: "custom",
+    programId: "earthprog:vesting",
+    amountWidth: "u128",
+    review: "registered",
+    factory: "vesting",
+    notes: "Earth factory. Cliff plus linear unlock. Unvested amounts cannot transfer.",
+  },
+  {
+    id: "TSxxx5",
+    name: "Mandate",
+    kind: "custom",
+    programId: "earthprog:agent",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "agent",
+    notes:
+      "Earth factory. AI-agent native. On-chain allowlist, per-ACT cap, epoch cap, cooldown. Create the contract on the Earth site: Standards → Create a contract → Mandate (TSxxx5). This wallet does not run the operator.",
   },
 ];
 
@@ -72,7 +124,8 @@ export const BUILTIN_TOKENS: ListedToken[] = [
 ];
 
 export function findStandard(id: string, list: TokenStandard[]): TokenStandard | undefined {
-  return list.find((s) => s.id === id);
+  const canonical = canonicalStandardId(id);
+  return list.find((s) => s.id === id || s.id === canonical || canonicalStandardId(s.id) === canonical);
 }
 
 export function findToken(mint: string, list: ListedToken[]): ListedToken | undefined {
@@ -80,13 +133,26 @@ export function findToken(mint: string, list: ListedToken[]): ListedToken | unde
 }
 
 export function isOnChainProgramId(programId: string): boolean {
-  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(programId);
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(programId)) return false;
+  if (programId.startsWith("earthprog:")) return false;
+  if (programId.includes("Preview")) return false;
+  if (/^Earth[A-Z]/.test(programId)) return false;
+  if (/Preview|Factory|Std|Lock/.test(programId) && /111111/.test(programId)) return false;
+  return true;
+}
+
+export function isLiveEarthProgram(programId: string): boolean {
+  if (!isOnChainProgramId(programId)) return false;
+  if (programId.startsWith("earthprog:")) return false;
+  if (programId.includes("Preview")) return false;
+  if (/^Earth[A-Z]/.test(programId)) return false;
+  return true;
 }
 
 export function reviewChecks(standard: TokenStandard): string[] {
   const checks: string[] = [];
-  if (standard.kind === "custom" && !isOnChainProgramId(standard.programId)) {
-    checks.push("Program ID is not a live Solana address yet. Balances stay at zero until it is deployed.");
+  if (standard.kind === "custom" && !isLiveEarthProgram(standard.programId)) {
+    checks.push("Earth has not deployed this program on-chain yet. Balances stay at zero until then.");
   }
   if (standard.amountWidth === "u128") {
     checks.push("u128 amounts are Earth-native. Other wallets will not show this adapter until they add it.");
@@ -95,7 +161,15 @@ export function reviewChecks(standard: TokenStandard): string[] {
     checks.push("Unverified: allowlisted in this wallet, not audited.");
   }
   if (standard.kind === "custom") {
-    checks.push("Custom programs can be upgraded. Review upgrade authority separately.");
+    checks.push("Earth deploys this program and holds upgrade authority. Listing a standard burns $1,000 of $EARTH on the Earth site.");
+  }
+  if (standard.factory === "confidential") {
+    checks.push("Confidential proofs verify on the ZK ElGamal program, currently disabled on mainnet pending audits.");
+  }
+  if (standard.factory === "agent") {
+    checks.push(
+      "Mandate is on-chain: allowlist, per-ACT cap, epoch cap, cooldown. This wallet will not run the operator or submit act. Create the contract on the Earth site: Standards → Create a contract → Mandate (TSxxx5).",
+    );
   }
   return checks;
 }

@@ -1,10 +1,46 @@
-import type { ListedToken, Pool, RouteQuote, TokenStandard } from "../types";
+import type { ListedToken, Pool, QuoteHop, RouteQuote, TokenStandard } from "../types";
 import { findPoolsForPair } from "../amm/pools";
 import { priceImpactBps, quoteSwap } from "../amm/math";
 import { findStandard } from "../adapters/registry";
+import { applyTransferLevy, levyNote } from "../standards/transfer";
 
 function venueLabel(venue: Pool["venue"]): string {
   return venue === "earth-stable" ? "Earth Stable" : "Earth CPMM";
+}
+
+function quoteHop(
+  pool: Pool,
+  tokens: ListedToken[],
+  inputMint: string,
+  outputMint: string,
+  amountIn: bigint,
+  label: string,
+): QuoteHop | null {
+  const aToB = pool.tokenA === inputMint;
+  const reserveIn = BigInt(aToB ? pool.reserveA : pool.reserveB);
+  const reserveOut = BigInt(aToB ? pool.reserveB : pool.reserveA);
+  const inToken = tokens.find((t) => t.mint === inputMint);
+  const outToken = tokens.find((t) => t.mint === outputMint);
+  const inLevy = applyTransferLevy(inToken, amountIn, "sell");
+  const poolIn = inLevy.toRecipient;
+  if (poolIn <= 0n) return null;
+  const poolOut = quoteSwap(pool.curve, reserveIn, reserveOut, poolIn, pool.feeBps);
+  if (poolOut <= 0n) return null;
+  const outLevy = applyTransferLevy(outToken, poolOut, "buy");
+  if (outLevy.toRecipient <= 0n) return null;
+  const notes = [levyNote(inToken, "sell"), levyNote(outToken, "buy")].filter(Boolean);
+  return {
+    venue: venueLabel(pool.venue),
+    poolId: pool.id,
+    label: notes.length ? `${label} · ${notes.join(" · ")}` : label,
+    inMint: inputMint,
+    outMint: outputMint,
+    amountIn: amountIn.toString(),
+    amountOut: outLevy.toRecipient.toString(),
+    feeBps: pool.feeBps,
+    poolAmountIn: poolIn.toString(),
+    poolAmountOut: poolOut.toString(),
+  };
 }
 
 export function quoteEarthRoutes(
@@ -19,29 +55,26 @@ export function quoteEarthRoutes(
   const quotes: RouteQuote[] = [];
 
   for (const pool of matched) {
+    const hop = quoteHop(
+      pool,
+      tokens,
+      inputMint,
+      outputMint,
+      amountIn,
+      `${venueLabel(pool.venue)} · ${pool.feeBps / 100}%`,
+    );
+    if (!hop) continue;
     const aToB = pool.tokenA === inputMint;
     const reserveIn = BigInt(aToB ? pool.reserveA : pool.reserveB);
     const reserveOut = BigInt(aToB ? pool.reserveB : pool.reserveA);
-    const amountOut = quoteSwap(pool.curve, reserveIn, reserveOut, amountIn, pool.feeBps);
-    if (amountOut <= 0n) continue;
     quotes.push({
       id: `earth:${pool.id}`,
       venue: venueLabel(pool.venue),
-      amountOut: amountOut.toString(),
-      priceImpactBps: priceImpactBps(reserveIn, reserveOut, amountIn, amountOut),
+      amountOut: hop.amountOut,
+      priceImpactBps: priceImpactBps(reserveIn, reserveOut, BigInt(hop.poolAmountIn ?? hop.amountIn), BigInt(hop.poolAmountOut ?? hop.amountOut)),
       executable: "earth",
-      hops: [
-        {
-          venue: venueLabel(pool.venue),
-          poolId: pool.id,
-          label: `${venueLabel(pool.venue)} · ${pool.feeBps / 100}%`,
-          inMint: inputMint,
-          outMint: outputMint,
-          amountIn: amountIn.toString(),
-          amountOut: amountOut.toString(),
-          feeBps: pool.feeBps,
-        },
-      ],
+      hops: [hop],
+      note: hop.label.includes("tax") || hop.label.includes("levy") ? hop.label : undefined,
     });
   }
 
@@ -67,51 +100,30 @@ function quoteTwoHop(
     const secondPools = findPoolsForPair(pools, mid, outputMint);
     if (!firstPools.length || !secondPools.length) continue;
 
+    const midToken = tokens.find((t) => t.mint === mid);
     for (const p1 of firstPools) {
-      const aToMid = p1.tokenA === inputMint;
-      const rIn1 = BigInt(aToMid ? p1.reserveA : p1.reserveB);
-      const rOut1 = BigInt(aToMid ? p1.reserveB : p1.reserveA);
-      const midOut = quoteSwap(p1.curve, rIn1, rOut1, amountIn, p1.feeBps);
-      if (midOut <= 0n) continue;
+      const hop1 = quoteHop(p1, tokens, inputMint, mid, amountIn, `${midToken?.symbol ?? "mid"} hop`);
+      if (!hop1) continue;
 
       for (const p2 of secondPools) {
+        const hop2 = quoteHop(p2, tokens, mid, outputMint, BigInt(hop1.amountOut), venueLabel(p2.venue));
+        if (!hop2) continue;
+        const aToMid = p1.tokenA === inputMint;
+        const rIn1 = BigInt(aToMid ? p1.reserveA : p1.reserveB);
+        const rOut1 = BigInt(aToMid ? p1.reserveB : p1.reserveA);
         const midToB = p2.tokenA === mid;
         const rIn2 = BigInt(midToB ? p2.reserveA : p2.reserveB);
         const rOut2 = BigInt(midToB ? p2.reserveB : p2.reserveA);
-        const finalOut = quoteSwap(p2.curve, rIn2, rOut2, midOut, p2.feeBps);
-        if (finalOut <= 0n) continue;
-        const midToken = tokens.find((t) => t.mint === mid);
         routes.push({
           id: `earth:${p1.id}>${p2.id}`,
           venue: "Earth hop",
-          amountOut: finalOut.toString(),
+          amountOut: hop2.amountOut,
           priceImpactBps: Math.max(
-            priceImpactBps(rIn1, rOut1, amountIn, midOut),
-            priceImpactBps(rIn2, rOut2, midOut, finalOut),
+            priceImpactBps(rIn1, rOut1, BigInt(hop1.poolAmountIn ?? hop1.amountIn), BigInt(hop1.poolAmountOut ?? hop1.amountOut)),
+            priceImpactBps(rIn2, rOut2, BigInt(hop2.poolAmountIn ?? hop2.amountIn), BigInt(hop2.poolAmountOut ?? hop2.amountOut)),
           ),
           executable: "earth",
-          hops: [
-            {
-              venue: venueLabel(p1.venue),
-              poolId: p1.id,
-              label: `${midToken?.symbol ?? "mid"} hop`,
-              inMint: inputMint,
-              outMint: mid,
-              amountIn: amountIn.toString(),
-              amountOut: midOut.toString(),
-              feeBps: p1.feeBps,
-            },
-            {
-              venue: venueLabel(p2.venue),
-              poolId: p2.id,
-              label: venueLabel(p2.venue),
-              inMint: mid,
-              outMint: outputMint,
-              amountIn: midOut.toString(),
-              amountOut: finalOut.toString(),
-              feeBps: p2.feeBps,
-            },
-          ],
+          hops: [hop1, hop2],
         });
       }
     }

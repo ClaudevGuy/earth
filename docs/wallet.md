@@ -69,7 +69,9 @@ Home groups tokens **by standard**. SOL is the headline balance. Each row is a m
 
 If Program ID is not a live Solana address, the wallet warns that balances stay at zero until you deploy. `u128` rows warn that other wallets will not show the adapter.
 
-Meridian is pre-seeded here too, as a preview.
+Meridian is pre-seeded here too, as a preview. So are the five Earth factories (Mandate, memecoin, reflect, confidential, vesting). List a mint on a factory the same way; the site is where you fill the mint variables.
+
+To **create** a Mandate (AI-agent) token: on the Earth **website**, Standards → Create a contract → Mandate (`TSxxx5`). Then in this wallet, Mandate is already seeded — list that contract (same ticker and decimals). This wallet will show and send it. It will not run the operator or submit `act`. Step-by-step: [Mandate (AI-agent)](mandate.md). There is no Launch curve factory.
 
 ## Connecting to Earth (and other sites)
 

@@ -7,8 +7,11 @@ This guide is for people using the Earth app and Earth Wallet. Start here, then 
 | Guide | What it covers |
 | --- | --- |
 | [Getting started](getting-started.md) | What Earth is, preview vs on-chain, first 10 minutes |
-| [Token standards](token-standards.md) | Create, publish, and find standards; mint on anyone’s adapter |
-| [Tokens and minting](tokens.md) | List and mint tokens on a standard |
+| [Token standards](token-standards.md) | Create, publish, and find standards; create a contract on anyone’s adapter |
+| [Factory standards](factory-standards.md) | Five Earth-built factories: Mandate (AI-agent), memecoin, reflect, confidential ZK, vest |
+| [Mandate (AI-agent)](mandate.md) | Exact clicks to create a Mandate contract; on-chain rules; common mistakes |
+| [Launchpad](launchpad.md) | Create a coin on a live standard with virtual liquidity; graduate to an Earth pool |
+| [Tokens and contracts](tokens.md) | List and create contracts on a standard |
 | [Liquidity pools](liquidity.md) | How pools work, how to create them, add/withdraw LP |
 | [Swapping and Trade](swap.md) | Trade terminal, quotes, routes, fees, Jupiter |
 | [Earth Wallet](wallet.md) | The wallet we are building, setup, send, connect |

@@ -57,6 +57,18 @@ export function applyTransferLevy(token: ListedToken | undefined, amount: bigint
     };
   }
 
+  if (factory === "agent") {
+    const tax = takeBps(amount, asNumber(c, "levyBps"));
+    return {
+      gross: amount,
+      toRecipient: amount - tax,
+      burned: 0n,
+      reflected: 0n,
+      creator: 0n,
+      treasury: tax,
+    };
+  }
+
   return empty(amount);
 }
 
@@ -65,6 +77,14 @@ export function levyNote(token: ListedToken | undefined, kind: LevyKind): string
   const split = applyTransferLevy(token, 10_000n, kind);
   if (split.toRecipient === 10_000n) return undefined;
   const bps = Number(10_000n - split.toRecipient);
-  const label = kind === "buy" ? "buy tax" : kind === "sell" ? "sell tax" : "transfer levy";
+  const factory = String(token.config?.factory ?? token.standardId.replace(/^earth-/, ""));
+  const label =
+    factory === "agent"
+      ? "agent levy"
+      : kind === "buy"
+        ? "buy tax"
+        : kind === "sell"
+          ? "sell tax"
+          : "transfer levy";
   return `${token.symbol} ${label} ${bps / 100}%`;
 }

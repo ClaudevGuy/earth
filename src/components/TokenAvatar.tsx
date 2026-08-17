@@ -1,3 +1,5 @@
+import { markSrc } from "../lib/mark";
+
 const PALETTES: [string, string][] = [
   ["#4a828a", "#7ea37a"],
   ["#e09245", "#c45c3a"],
@@ -18,8 +20,28 @@ function paletteFor(symbol: string): [string, string] {
   return PALETTES[n % PALETTES.length]!;
 }
 
-export function TokenAvatar({ symbol, size = 32 }: { symbol: string; size?: number }) {
+export function TokenAvatar({
+  symbol,
+  size = 32,
+  logo,
+}: {
+  symbol: string;
+  size?: number;
+  logo?: string;
+}) {
   const [from, to] = paletteFor(symbol);
+  const src = logo || (symbol === "EARTH" ? markSrc(size) : undefined);
+  if (src) {
+    return (
+      <span
+        className="token-avatar"
+        style={{ width: size, height: size, background: `linear-gradient(145deg, ${from}, ${to})` }}
+        aria-hidden="true"
+      >
+        <img src={src} alt="" />
+      </span>
+    );
+  }
   return (
     <span
       className="token-avatar"

@@ -5,19 +5,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CATALOG_FILE = resolve(dirname(fileURLToPath(import.meta.url)), ".earth-catalog.json");
-const CATALOG_SEED = [
-  {
-    id: "meridian-u128",
-    name: "Meridian (u128)",
-    kind: "custom",
-    programId: "MeridianU128Preview11111111111111111111111",
-    amountWidth: "u128",
-    notes:
-      "Built-in example adapter for 128-bit amounts. Anyone can list their own ticker on it in this preview.",
-    publisher: "earth",
-    publishedAt: 0,
-  },
-];
+const MARKET_FILE = resolve(dirname(fileURLToPath(import.meta.url)), ".earth-market.json");
+const CATALOG_SEED = [] as Array<{
+  id: string;
+  name: string;
+  kind: string;
+  programId: string;
+  amountWidth: string;
+  notes: string;
+  publisher?: string;
+  publishedAt: number;
+}>;
 
 function json(res: import("http").ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
@@ -119,8 +117,65 @@ function catalogDevPlugin(): Plugin {
   };
 }
 
+function liveDevPlugin(): Plugin {
+  const store = {
+    async getJSON(key: string) {
+      try {
+        const all = JSON.parse(await readFile(MARKET_FILE, "utf8")) as Record<string, unknown>;
+        return all[key] ?? null;
+      } catch {
+        return null;
+      }
+    },
+    async setJSON(key: string, value: unknown) {
+      let all: Record<string, unknown> = {};
+      try {
+        all = JSON.parse(await readFile(MARKET_FILE, "utf8")) as Record<string, unknown>;
+      } catch {
+        all = {};
+      }
+      all[key] = value;
+      await writeFile(MARKET_FILE, JSON.stringify(all, null, 2));
+    },
+  };
+
+  async function readBody(req: import("http").IncomingMessage) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    return Buffer.concat(chunks).toString("utf8");
+  }
+
+  return {
+    name: "earth-live-dev",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        void (async () => {
+          const path = (req.url ?? "").split("?")[0];
+          if (path === "/api/market" || path === "/api/settle") {
+            const { handleMarket, handleSettle } = await import("./netlify/lib/live.mjs");
+            const event = {
+              httpMethod: req.method,
+              body: req.method === "GET" ? undefined : await readBody(req),
+              queryStringParameters: Object.fromEntries(new URL(req.url ?? "/", "http://earth.local").searchParams),
+            };
+            const result =
+              path === "/api/market"
+                ? await handleMarket(event, store)
+                : await handleSettle(event, store, process.env.SOLANA_RPC_URL || process.env.VITE_RPC_URL || "https://api.mainnet-beta.solana.com");
+            res.statusCode = result.statusCode;
+            for (const [key, value] of Object.entries(result.headers ?? {})) res.setHeader(key, String(value));
+            res.end(result.body ?? "");
+            return;
+          }
+          next();
+        })().catch(next);
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), catalogDevPlugin()],
+  plugins: [react(), catalogDevPlugin(), liveDevPlugin()],
   define: {
     global: "globalThis",
   },

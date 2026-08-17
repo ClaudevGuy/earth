@@ -17,7 +17,7 @@ Earth’s point is that **anyone can register another program**. If that program
 
 Keys stay on this device. The vault is encrypted with your password (PBKDF2, 310,000 iterations). Earth cannot recover a lost seed or password.
 
-## Install (developer preview)
+## Install
 
 From the Earth repo:
 
@@ -57,7 +57,7 @@ Home groups tokens **by standard**. SOL is the headline balance. Each row is a m
 
 - **Receive** — one address for SOL, SPL, Token-2022, and custom adapter accounts owned by you. Copy it.
 - **Send** — pick a token. Frozen and non-transferable mints cannot be sent. Token-2022 transfer fees are shown when present.
-- Custom adapters **without a live program ID** cannot send on chain. Trade them on Earth, or register a real program ID.
+- Custom adapters **without a live program ID** cannot send on chain. List a real program ID, or hold SPL / Token-2022 factory mints and trade them on the Earth DEX.
 
 ## Standards in the wallet
 
@@ -69,7 +69,7 @@ Home groups tokens **by standard**. SOL is the headline balance. Each row is a m
 
 If Program ID is not a live Solana address, the wallet warns that balances stay at zero until you deploy. `u128` rows warn that other wallets will not show the adapter.
 
-Meridian is pre-seeded here too, as a preview. So are the five Earth factories (Mandate, memecoin, reflect, confidential, vesting). List a mint on a factory the same way; the site is where you fill the mint variables.
+The nine Earth factories (Mandate, memecoin, reflect, confidential, vesting, Kernel, Proxy, Flash, Chamber) are listed here. List a mint on a factory the same way; the site is where you fill the mint variables. Mandate is AI-agent native: the wallet will show and send the token, but it will not run the off-chain operator or submit `act`.
 
 To **create** a Mandate (AI-agent) token: on the Earth **website**, Standards → Create a contract → Mandate (`TSxxx5`). Then in this wallet, Mandate is already seeded — list that contract (same ticker and decimals). This wallet will show and send it. It will not run the operator or submit `act`. Step-by-step: [Mandate (AI-agent)](mandate.md). There is no Launch curve factory.
 
@@ -100,6 +100,6 @@ Network label in the header follows the RPC URL (`mainnet` / `devnet` / `testnet
 ## What the wallet does not do yet
 
 - It does not replace the Earth AMM UI. Create pools and swap on the website.
-- It does not mint custom tokens by itself. List the mint, then use your program (or Earth preview listing) as described in [Tokens and minting](tokens.md).
-- Preview program IDs are not sent to chain. Send will error until you register a real program and the recipient has an account on that program.
+- It does not mint custom tokens by itself. List the mint, then use your program as described in [Tokens and minting](tokens.md).
+- Program IDs that are not live Solana addresses are not sent to chain. Send will error until you register a real program and the recipient has an account on that program.
 - It is not an audit of custom programs you register.

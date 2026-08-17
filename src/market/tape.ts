@@ -15,62 +15,21 @@ function saveLive(rows: Fill[]): void {
   saveJson("tape", rows.slice(0, 240));
 }
 
-function hashStr(value: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < value.length; i++) h = Math.imul(h ^ value.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-export function seedTape(pool: Pool, base: ListedToken, quote: ListedToken, last: number): Fill[] {
-  if (last <= 0) return [];
-  const rand = mulberry32(hashStr(`tape:${pool.id}`));
-  const now = Date.now();
-  const rows: Fill[] = [];
-  for (let i = 36; i >= 1; i--) {
-    const buy = rand() > 0.48;
-    const drift = 1 + (rand() - 0.5) * 0.012;
-    const price = last * drift;
-    const quoteAmt = (0.2 + rand() * 8) * (pool.curve === "stable" ? 400 : 12);
-    const baseAmt = price > 0 ? quoteAmt / price : 0;
-    const baseRaw = BigInt(Math.max(1, Math.round(baseAmt * 10 ** Math.min(base.decimals, 8))));
-    const quoteRaw = BigInt(Math.max(1, Math.round(quoteAmt * 10 ** Math.min(quote.decimals, 8))));
-    rows.push({
-      id: `seed-${pool.id}-${i}`,
-      time: now - i * (18_000 + Math.floor(rand() * 40_000)),
-      poolId: pool.id,
-      inMint: buy ? quote.mint : base.mint,
-      outMint: buy ? base.mint : quote.mint,
-      amountIn: buy ? quoteRaw.toString() : baseRaw.toString(),
-      amountOut: buy ? baseRaw.toString() : quoteRaw.toString(),
-      venue: pool.venue === "earth-stable" ? "Earth Stable" : "Earth CPMM",
-    });
-  }
-  return rows;
-}
-
 export function liveFills(): Fill[] {
   return loadLive();
 }
 
-export function fillsForPair(pool: Pool, base: ListedToken, quote: ListedToken, last: number): Fill[] {
+export function setLiveFills(rows: Fill[]): void {
+  saveLive(rows);
+}
+
+export function fillsForPair(pool: Pool | { id?: string }, base: ListedToken, quote: ListedToken): Fill[] {
   const live = loadLive().filter((row) => {
-    if (row.poolId && row.poolId === pool.id) return true;
+    if (pool.id && row.poolId && row.poolId === pool.id) return true;
     const mints = new Set([row.inMint, row.outMint]);
     return mints.has(base.mint) && mints.has(quote.mint);
   });
-  const seeded = seedTape(pool, base, quote, last);
-  return [...live, ...seeded].sort((a, b) => b.time - a.time).slice(0, 80);
+  return live.sort((a, b) => b.time - a.time).slice(0, 80);
 }
 
 export function recordRouteFill(input: {

@@ -9,4 +9,6 @@ earth-wallet.zip
 *.log
 .vite
 .earth-catalog.json
+.earth-market.json
+.earth-vaults.json
 programs/target

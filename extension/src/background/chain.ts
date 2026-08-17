@@ -387,10 +387,7 @@ export async function sendFunds(input: {
         mintFeeFor(protocolFee),
       );
     }
-  } else {
-    if (!isOnChainProgramId(input.standard.programId)) {
-      throw new Error("This adapter has no on-chain program yet. Earth deploys it when you burn $EARTH to list a standard on the Earth site.");
-    }
+  } else if (isOnChainProgramId(input.standard.programId)) {
     const programId = new PublicKey(input.standard.programId);
     const mintKey = new PublicKey(input.mint);
     const owned = await connection.getProgramAccounts(programId, {
@@ -425,6 +422,25 @@ export async function sendFunds(input: {
     );
     if (takeFee && feeAcc) {
       tx.add(adapterTransferIx(programId, source.pubkey, feeAcc.pubkey, mintKey, payer, protocolFee));
+    }
+  } else {
+    const mint = new PublicKey(input.mint);
+    const info = await connection.getAccountInfo(mint, "confirmed");
+    if (!info) throw new Error("This mint is not on-chain yet.");
+    const programId = info.owner.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    const mintInfo = await getMint(connection, mint, "confirmed", programId);
+    const feeConfig = programId.equals(TOKEN_2022_PROGRAM_ID) ? getTransferFeeConfig(mintInfo) : null;
+    let epoch = 0n;
+    if (feeConfig) epoch = BigInt((await connection.getEpochInfo()).epoch);
+    const mintFeeFor = (amount: bigint) => {
+      if (!feeConfig) return null;
+      const actual = epoch >= feeConfig.newerTransferFee.epoch ? feeConfig.newerTransferFee : feeConfig.olderTransferFee;
+      return calculateFee(actual, amount);
+    };
+    const recipientAmount = collectProtocol ? net : input.amount;
+    appendSplTransfer(tx, payer, dest, mint, recipientAmount, programId, mintInfo.decimals, mintFeeFor(recipientAmount));
+    if (collectProtocol) {
+      appendSplTransfer(tx, payer, PROTOCOL_FEE_OWNER, mint, protocolFee, programId, mintInfo.decimals, mintFeeFor(protocolFee));
     }
   }
 

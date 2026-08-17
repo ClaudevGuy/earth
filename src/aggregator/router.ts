@@ -1,8 +1,8 @@
-import type { ListedToken, Pool, QuoteHop, RouteQuote, TokenStandard } from "../types";
+import type { ListedToken, Pool, QuoteHop, RouteQuote } from "../types";
 import { findPoolsForPair } from "../amm/pools";
 import { priceImpactBps, quoteSwap } from "../amm/math";
-import { findStandard } from "../adapters/registry";
 import { applyTransferLevy, levyNote } from "../standards/transfer";
+import { isOnChainMint } from "../lib/ids";
 
 function venueLabel(venue: Pool["venue"]): string {
   return venue === "earth-stable" ? "Earth Stable" : "Earth CPMM";
@@ -21,12 +21,14 @@ function quoteHop(
   const reserveOut = BigInt(aToB ? pool.reserveB : pool.reserveA);
   const inToken = tokens.find((t) => t.mint === inputMint);
   const outToken = tokens.find((t) => t.mint === outputMint);
-  const inLevy = applyTransferLevy(inToken, amountIn, "sell");
+  const inLevy = isOnChainMint(inputMint) ? { toRecipient: amountIn } : applyTransferLevy(inToken, amountIn, "sell");
   const poolIn = inLevy.toRecipient;
   if (poolIn <= 0n) return null;
   const poolOut = quoteSwap(pool.curve, reserveIn, reserveOut, poolIn, pool.feeBps);
   if (poolOut <= 0n) return null;
-  const outLevy = applyTransferLevy(outToken, poolOut, "buy");
+  const outLevy = isOnChainMint(outputMint)
+    ? { toRecipient: poolOut }
+    : applyTransferLevy(outToken, poolOut, "buy");
   if (outLevy.toRecipient <= 0n) return null;
   const notes = [levyNote(inToken, "sell"), levyNote(outToken, "buy")].filter(Boolean);
   return {
@@ -130,57 +132,6 @@ function quoteTwoHop(
   }
 
   return routes.slice(0, 4);
-}
-
-export function canUseJupiter(input: ListedToken, output: ListedToken, standards: TokenStandard[]): boolean {
-  const a = findStandard(input.standardId, standards);
-  const b = findStandard(output.standardId, standards);
-  return Boolean(a && b && a.kind !== "custom" && b.kind !== "custom");
-}
-
-export async function quoteJupiter(
-  inputMint: string,
-  outputMint: string,
-  amountIn: bigint,
-): Promise<RouteQuote | null> {
-  if (amountIn <= 0n) return null;
-  try {
-    const params = new URLSearchParams({
-      inputMint,
-      outputMint,
-      amount: amountIn.toString(),
-    });
-    const res = await fetch(`/api/jupiter-quote?${params.toString()}`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      outAmount?: string;
-      priceImpactPct?: number;
-      skipped?: boolean;
-    };
-    if (data.skipped || !data.outAmount) return null;
-    const impact = Math.round(Math.abs(data.priceImpactPct ?? 0) * 100);
-    return {
-      id: "jupiter",
-      venue: "Jupiter",
-      amountOut: data.outAmount,
-      priceImpactBps: impact,
-      executable: "jupiter",
-      note: "SPL / Token-2022 only. Requires JUPITER_API_KEY on Netlify.",
-      hops: [
-        {
-          venue: "Jupiter",
-          label: "Jupiter meta-aggregator",
-          inMint: inputMint,
-          outMint: outputMint,
-          amountIn: amountIn.toString(),
-          amountOut: data.outAmount,
-          feeBps: 0,
-        },
-      ],
-    };
-  } catch {
-    return null;
-  }
 }
 
 export function pickBest(routes: RouteQuote[]): RouteQuote | undefined {

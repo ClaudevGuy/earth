@@ -3,7 +3,7 @@ import { applySwap } from "./engine";
 
 export function executeEarthRoute(pools: Pool[], route: RouteQuote): Pool[] {
   if (route.executable !== "earth") {
-    throw new Error("This venue is quote-only in the preview.");
+    throw new Error("This venue is quote-only. Pick an Earth pool.");
   }
   let next = pools;
   for (const hop of route.hops) {

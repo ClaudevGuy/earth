@@ -44,17 +44,6 @@ export function standardFromCatalog(entry: CatalogStandard): TokenStandard {
 }
 
 export const CATALOG_SEED: CatalogStandard[] = [
-  {
-    id: "meridian-u128",
-    name: "Meridian (u128)",
-    kind: "custom",
-    programId: "MeridianU128Preview11111111111111111111111",
-    amountWidth: "u128",
-    notes:
-      "Earth-built example adapter for 128-bit amounts. Anyone can create a contract on it.",
-    publisher: "earth",
-    publishedAt: 0,
-  },
   ...FACTORY_STANDARDS.map((row) => ({ ...catalogFromStandard(row, "earth"), publishedAt: 0 })),
 ];
 
@@ -193,7 +182,10 @@ export async function publishToCatalog(entry: CatalogStandard): Promise<CatalogS
 }
 
 function withSeed(list: CatalogStandard[]): CatalogStandard[] {
-  const mandate = CATALOG_SEED.find((s) => s.id === "TSxxx5");
+  const factorySeed = new Map(
+    CATALOG_SEED.filter((s) => s.factory && s.id.startsWith("TSxxx")).map((s) => [s.id, s]),
+  );
+  const mandate = factorySeed.get("TSxxx5");
   const migrated: CatalogStandard[] = [];
   const seen = new Set<string>();
   for (const row of list) {
@@ -205,10 +197,11 @@ function withSeed(list: CatalogStandard[]): CatalogStandard[] {
       }
       continue;
     }
-    if (id === "TSxxx5" && mandate) {
-      if (!seen.has("TSxxx5")) {
-        migrated.push({ ...mandate, publishedAt: row.publishedAt || 0 });
-        seen.add("TSxxx5");
+    const seeded = factorySeed.get(id);
+    if (seeded) {
+      if (!seen.has(id)) {
+        migrated.push({ ...seeded, publishedAt: row.publishedAt || 0 });
+        seen.add(id);
       }
       continue;
     }

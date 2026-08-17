@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CatalogStandard, CurveKind, LaunchpadCoin, LaunchpadHolding, ListedToken, LpPosition, Pool, TokenLock, TokenSocials, TokenStandard } from "./types";
+import type {
+  CatalogStandard,
+  CurveKind,
+  LaunchpadCoin,
+  LaunchpadHolding,
+  ListedToken,
+  LpPosition,
+  Pool,
+  RouteQuote,
+  TokenLock,
+  TokenSocials,
+  TokenStandard,
+} from "./types";
 import {
   catalogFromStandard,
   decodeShareCode,
@@ -10,11 +22,10 @@ import {
   type CatalogStatus,
 } from "./adapters/catalog";
 import { canRemoveStandard, findStandard, loadStandards, saveCustomStandards } from "./adapters/registry";
-import { applyDeposit, applyWithdraw, createPool } from "./amm/engine";
-import { findPool, loadPools, savePools } from "./amm/pools";
-import { loadTokens, saveExtraTokens } from "./data/tokens";
+import { findPool, loadPools, mergeMarketPools, savePools } from "./amm/pools";
+import { loadTokens, mergeMarketTokens, saveExtraTokens } from "./data/tokens";
 import { assertFits, parseAmount } from "./lib/amounts";
-import { makeId, previewMint, previewProgramId, validateDecimals, validateTicker } from "./lib/ids";
+import { isOnChainMint, makeId, previewProgramId, validateDecimals, validateTicker } from "./lib/ids";
 import { nextStandardId } from "./lib/standardId";
 import { loadJson, saveJson } from "./lib/storage";
 import { WSOL } from "./lib/constants";
@@ -29,6 +40,9 @@ import {
   isEarthWalletInstalled,
   subscribeEarthWallet,
 } from "./lib/wallet";
+import { createTokenMint, revokeMintAuthorities, sendAndConfirmEncoded, transferFeeBpsFromConfig } from "./lib/chain";
+import { fetchMarket, positionsFor, publishMarket, settle, type MarketState } from "./lib/marketApi";
+import { liveFills, setLiveFills } from "./market/tape";
 import { initialCurve, lpTokenReserve, quoteBuy, quoteSell } from "./launchpad/curve";
 
 export interface LaunchInput {
@@ -51,6 +65,11 @@ export interface LaunchInput {
   feeBps: number;
 }
 
+function supplyFromConfig(config: ListedToken["config"] | undefined, decimals: number): bigint {
+  const raw = String(config?.totalSupply ?? "1000000000");
+  return parseAmount(raw, decimals);
+}
+
 export function useEarth() {
   const [standards, setStandards] = useState<TokenStandard[]>(() => loadStandards());
   const [tokens, setTokens] = useState<ListedToken[]>(() => loadTokens());
@@ -66,12 +85,22 @@ export function useEarth() {
   const [walletError, setWalletError] = useState<string>();
   const [earthInstalled, setEarthInstalled] = useState(() => isEarthWalletInstalled());
 
+  const applyMarket = useCallback((next: MarketState, owner?: string) => {
+    setTokens(mergeMarketTokens([], next.tokens));
+    setPools(mergeMarketPools([], next.pools));
+    setLaunches(next.launches ?? []);
+    setLaunchHoldings(next.holdings ?? []);
+    setPositions(positionsFor(owner ?? wallet, next.lp ?? []));
+    setLiveFills(next.tape ?? []);
+  }, [wallet]);
+
   useEffect(() => savePools(pools), [pools]);
   useEffect(() => saveCustomStandards(standards), [standards]);
   useEffect(() => saveExtraTokens(tokens), [tokens]);
   useEffect(() => saveJson("lp", positions), [positions]);
   useEffect(() => saveJson("launches", launches), [launches]);
   useEffect(() => saveJson("launchHoldings", launchHoldings), [launchHoldings]);
+
   useEffect(() => {
     let cancelled = false;
     async function pull() {
@@ -87,6 +116,22 @@ export function useEarth() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function pull() {
+      const next = await fetchMarket();
+      if (cancelled) return;
+      applyMarket(next, wallet);
+    }
+    void pull();
+    const timer = window.setInterval(() => void pull(), 8_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [applyMarket, wallet]);
+
   useEffect(() => {
     const refresh = () => setEarthInstalled(isEarthWalletInstalled());
     window.addEventListener("earth#initialized", refresh);
@@ -118,7 +163,7 @@ export function useEarth() {
         setWallet(address);
         await refreshBalances(address);
       } catch {
-        /* silent reconnect — user can click Connect */
+        /* silent reconnect */
       }
     })();
     const unsub = subscribeEarthWallet((address) => {
@@ -152,8 +197,49 @@ export function useEarth() {
     setBalances(new Map());
   }, []);
 
+  const needWallet = useCallback(() => {
+    if (!wallet) throw new Error("Connect Earth Wallet first.");
+    return wallet;
+  }, [wallet]);
+
+  const pushMarket = useCallback(
+    async (patch: Partial<MarketState>) => {
+      const current = await fetchMarket();
+      const next = await publishMarket({
+        rev: current.rev,
+        tokens: patch.tokens ?? current.tokens,
+        pools: patch.pools ?? current.pools,
+        launches: patch.launches ?? current.launches,
+        holdings: patch.holdings ?? current.holdings,
+        lp: patch.lp ?? current.lp,
+        tape: patch.tape ?? current.tape ?? liveFills(),
+      });
+      applyMarket(next, wallet);
+      return next;
+    },
+    [applyMarket, wallet],
+  );
+
+  const runSettle = useCallback(
+    async (action: string, payload: Record<string, unknown>) => {
+      const owner = needWallet();
+      const prep = await settle(action, { ...payload, user: owner });
+      if (prep.state) {
+        applyMarket(prep.state, owner);
+        return prep;
+      }
+      if (!prep.transaction || !prep.ticket) throw new Error("Earth could not build that transaction.");
+      await sendAndConfirmEncoded(prep.transaction);
+      const done = await settle("ack", { ticket: prep.ticket });
+      if (done.state) applyMarket(done.state, owner);
+      await refreshBalances(owner);
+      return done;
+    },
+    [applyMarket, needWallet, refreshBalances],
+  );
+
   const createPairPool = useCallback(
-    (input: {
+    async (input: {
       tokenA: ListedToken;
       tokenB: ListedToken;
       amountA: bigint;
@@ -163,7 +249,9 @@ export function useEarth() {
       widthA?: TokenStandard["amountWidth"];
       widthB?: TokenStandard["amountWidth"];
       lockLp?: boolean;
+      vault?: string;
     }) => {
+      const owner = needWallet();
       if (input.tokenA.mint === input.tokenB.mint) throw new Error("Pick two different tokens.");
       if (input.amountA <= 0n || input.amountB <= 0n) throw new Error("Both amounts must be positive.");
       if (findPool(pools, input.tokenA.mint, input.tokenB.mint)) {
@@ -173,25 +261,31 @@ export function useEarth() {
       const sb = findStandard(input.tokenB.standardId, standards);
       assertFits(input.amountA, input.widthA ?? sa?.amountWidth ?? "u64");
       assertFits(input.amountB, input.widthB ?? sb?.amountWidth ?? "u64");
-      const pool = createPool({
+      const vault = input.vault || (await settle("allocVault", {})).vault;
+      if (!vault) throw new Error("Could not open an Earth vault for this pool.");
+      await runSettle("createPool", {
+        vault,
         tokenA: input.tokenA.mint,
         tokenB: input.tokenB.mint,
-        amountA: input.amountA,
-        amountB: input.amountB,
+        amountA: input.amountA.toString(),
+        amountB: input.amountB.toString(),
         curve: input.curve,
         feeBps: input.feeBps,
       });
-      setPools((prev) => [...prev, pool]);
-      if (!input.lockLp) {
-        setPositions((prev) => [...prev, { poolId: pool.id, shares: pool.lpSupply }]);
-      }
-      return pool;
+      const created = findPool(
+        (await fetchMarket()).pools,
+        input.tokenA.mint,
+        input.tokenB.mint,
+      );
+      if (!created) throw new Error("Pool created on-chain but is not in the market yet. Refresh.");
+      void owner;
+      return created;
     },
-    [pools, standards],
+    [needWallet, pools, runSettle, standards],
   );
 
   const addTokenToStandard = useCallback(
-    (standardId: string, input: {
+    async (standardId: string, input: {
       symbol: string;
       name: string;
       mint?: string;
@@ -206,7 +300,10 @@ export function useEarth() {
       amountQuote?: string;
       curve?: CurveKind;
       feeBps?: number;
+      destination?: string;
+      lockSupply?: boolean;
     }) => {
+      const owner = needWallet();
       let standard = findStandard(standardId, standards);
       if (!standard) {
         const row = catalog.find((s) => s.id === standardId);
@@ -221,7 +318,20 @@ export function useEarth() {
       const decErr = validateDecimals(input.decimals, standard.amountWidth);
       if (decErr) throw new Error(decErr);
       const symbol = input.symbol.trim().toUpperCase();
-      const mint = input.mint?.trim() || previewMint(symbol);
+      let mint = input.mint?.trim() || "";
+      if (mint && !isOnChainMint(mint)) throw new Error("Paste a real Solana mint address, or leave it blank to mint on-chain.");
+      if (!mint) {
+        if (input.decimals > 9) throw new Error("On-chain contracts use 0–9 decimals. Lower decimals, or paste an existing mint.");
+        const minted = await createTokenMint({
+          payer: owner,
+          destination: input.destination || owner,
+          decimals: input.decimals,
+          supply: supplyFromConfig(input.config, input.decimals),
+          transferFeeBps: transferFeeBpsFromConfig(input.config),
+        });
+        mint = minted.mint;
+        await refreshBalances(owner);
+      }
       if (tokens.some((t) => t.mint === mint)) throw new Error("That mint is already listed.");
       if (tokens.some((t) => t.symbol.toUpperCase() === symbol && t.standardId === standardId)) {
         throw new Error("That ticker is already listed on this standard.");
@@ -238,34 +348,37 @@ export function useEarth() {
         standardId,
         tags,
         config: input.config,
-        lock: { ...EMPTY_LOCK },
+        lock: { ...EMPTY_LOCK, mintRevoked: Boolean(input.lockSupply) },
         logo: input.logo,
         description: input.description?.trim() || undefined,
         socials: input.socials,
       };
-      setTokens((prev) => [...prev, token]);
+      if (input.lockSupply) {
+        await revokeMintAuthorities({ payer: owner, mint, mintRevoked: true }).catch(() => undefined);
+      }
+      const nextTokens = [...tokens, token];
+      setTokens(nextTokens);
 
       let pool: Pool | undefined;
-      const shouldPool = Boolean(input.createPool);
-      if (shouldPool) {
-        const quote = tokens.find((t) => t.mint === (input.quoteMint || WSOL));
+      if (input.createPool) {
+        const quote = nextTokens.find((t) => t.mint === (input.quoteMint || WSOL));
         if (!quote) throw new Error("Quote token not found.");
-        const amountBase = input.amountBase;
-        const amountQuote = input.amountQuote;
-        if (!amountBase || !amountQuote) throw new Error("Pool amounts are required.");
-        pool = createPairPool({
+        if (!input.amountBase || !input.amountQuote) throw new Error("Pool amounts are required.");
+        pool = await createPairPool({
           tokenA: token,
           tokenB: quote,
-          amountA: parseAmount(amountBase, token.decimals),
-          amountB: parseAmount(amountQuote, quote.decimals),
+          amountA: parseAmount(input.amountBase, token.decimals),
+          amountB: parseAmount(input.amountQuote, quote.decimals),
           curve: input.curve ?? "constant-product",
           feeBps: input.feeBps ?? (asNumber(input.config ?? {}, "creatorFeeBps", 30) || 30),
           widthA: standard.amountWidth,
         });
+      } else {
+        await pushMarket({ tokens: nextTokens });
       }
       return { token, pool };
     },
-    [catalog, createPairPool, standards, tokens],
+    [catalog, createPairPool, needWallet, pushMarket, refreshBalances, standards, tokens],
   );
 
   const launchStandard = useCallback(
@@ -279,16 +392,9 @@ export function useEarth() {
       }
       if (!input.standardName.trim()) throw new Error("Give the standard a name.");
       const sourceCode = parseSourceCode(input.sourceCode.filename, input.sourceCode.code);
-
-      // Custom standards require burning $1,000 of $EARTH (quoted from the live price).
-      // The mint is not set yet, so this protocol preview does not take tokens.
-
       const id = nextStandardId([...standards.map((s) => s.id), ...catalog.map((s) => s.id)]);
       const programId = input.programId?.trim() || previewProgramId(input.standardName);
       const symbol = input.symbol?.trim().toUpperCase() ?? "";
-      const mint = listing ? input.mint?.trim() || previewMint(symbol) : "";
-      if (mint && tokens.some((t) => t.mint === mint)) throw new Error("That contract is already listed.");
-
       const standard: TokenStandard = {
         id,
         name: input.standardName.trim(),
@@ -307,41 +413,12 @@ export function useEarth() {
           "Public source is on this card. Listing a standard burns $1,000 of $EARTH. Unverified — not an audit.",
       };
 
-      let token: ListedToken | undefined;
-      if (listing) {
-        token = {
-          mint,
-          symbol,
-          name: input.tokenName?.trim() || symbol,
-          decimals: input.decimals ?? 0,
-          standardId: id,
-          tags: ["user"],
-          lock: { ...EMPTY_LOCK },
-        };
-      }
-
-      let pool: Pool | undefined;
-      if (listing && token && input.createPool) {
-        const quote = tokens.find((t) => t.mint === input.quoteMint);
-        if (!quote) throw new Error("Quote token not found.");
-        pool = createPairPool({
-          tokenA: token,
-          tokenB: quote,
-          amountA: parseAmount(input.amountBase || "0", token.decimals),
-          amountB: parseAmount(input.amountQuote || "0", quote.decimals),
-          curve: input.curve,
-          feeBps: input.feeBps,
-          widthA: input.amountWidth,
-        });
-      }
-
       let published = false;
       if (input.publish !== false) {
         try {
           const row = await publishToCatalog(catalogFromStandard(standard, wallet));
           standard.published = true;
           standard.id = row.id;
-          if (token) token.standardId = row.id;
           published = true;
           setCatalog((prev) => {
             const rest = prev.filter((s) => s.id !== row.id && s.programId !== row.programId);
@@ -351,12 +428,29 @@ export function useEarth() {
           published = false;
         }
       }
-
       setStandards((prev) => [...prev, standard]);
-      if (token) setTokens((prev) => [...prev, token]);
+
+      let token: ListedToken | undefined;
+      let pool: Pool | undefined;
+      if (listing) {
+        const minted = await addTokenToStandard(standard.id, {
+          symbol,
+          name: input.tokenName?.trim() || symbol,
+          mint: input.mint,
+          decimals: input.decimals ?? 6,
+          createPool: input.createPool,
+          quoteMint: input.quoteMint,
+          amountBase: input.amountBase,
+          amountQuote: input.amountQuote,
+          curve: input.curve,
+          feeBps: input.feeBps,
+        });
+        token = minted.token;
+        pool = minted.pool;
+      }
       return { standard, token, pool, published };
     },
-    [catalog, createPairPool, tokens, wallet, standards],
+    [addTokenToStandard, catalog, wallet, standards],
   );
 
   const adoptStandard = useCallback(async (entry: CatalogStandard | string) => {
@@ -414,32 +508,34 @@ export function useEarth() {
     setPositions((prev) => prev.filter((p) => !poolIds.has(p.poolId)));
   }, [pools, standards, tokens]);
 
-  const depositToPool = useCallback((poolId: string, amountA: bigint, amountB: bigint) => {
-    const existing = pools.find((p) => p.id === poolId);
-    if (!existing) throw new Error("Pool not found.");
-    const { pool, shares } = applyDeposit(existing, amountA, amountB);
-    setPools((prev) => prev.map((p) => (p.id === pool.id ? pool : p)));
-    setPositions((prev) => {
-      const rest = prev.filter((p) => p.poolId !== pool.id);
-      const held = prev.find((p) => p.poolId === pool.id);
-      const next = (held ? BigInt(held.shares) : 0n) + shares;
-      return [...rest, { poolId: pool.id, shares: next.toString() }];
-    });
-    return shares;
-  }, [pools]);
+  const depositToPool = useCallback(
+    async (poolId: string, amountA: bigint, amountB: bigint) => {
+      const existing = pools.find((p) => p.id === poolId);
+      if (!existing?.vault) throw new Error("Pool not found.");
+      await runSettle("deposit", {
+        poolId,
+        vault: existing.vault,
+        amountA: amountA.toString(),
+        amountB: amountB.toString(),
+      });
+      return amountA;
+    },
+    [pools, runSettle],
+  );
 
-  const withdrawFromPool = useCallback((poolId: string) => {
-    const existing = pools.find((p) => p.id === poolId);
-    const position = positions.find((p) => p.poolId === poolId);
-    if (!existing || !position) throw new Error("No LP position on this pool.");
-    const result = applyWithdraw(existing, BigInt(position.shares));
-    setPools((prev) => prev.map((p) => (p.id === result.pool.id ? result.pool : p)));
-    setPositions((prev) => prev.filter((p) => p.poolId !== poolId));
-    return result;
-  }, [pools, positions]);
+  const withdrawFromPool = useCallback(
+    async (poolId: string) => {
+      const existing = pools.find((p) => p.id === poolId);
+      if (!existing?.vault) throw new Error("No LP position on this pool.");
+      await runSettle("withdraw", { poolId, vault: existing.vault });
+      return { amountA: 0n, amountB: 0n, pool: existing };
+    },
+    [pools, runSettle],
+  );
 
   const lockToken = useCallback(
-    (mint: string, kinds: Array<keyof TokenLock>) => {
+    async (mint: string, kinds: Array<keyof TokenLock>) => {
+      const owner = needWallet();
       const token = tokens.find((t) => t.mint === mint);
       if (!token) throw new Error("Token not found.");
       if (!canLockToken(token)) throw new Error("Only tokens you listed can be locked.");
@@ -453,11 +549,19 @@ export function useEarth() {
         }
         lock[kind] = true;
       }
+      await revokeMintAuthorities({
+        payer: owner,
+        mint,
+        mintRevoked: kinds.includes("mintRevoked"),
+        freezeRevoked: kinds.includes("freezeRevoked"),
+      });
       const next = { ...token, lock };
-      setTokens((prev) => prev.map((t) => (t.mint === mint ? next : t)));
+      const nextTokens = tokens.map((t) => (t.mint === mint ? next : t));
+      setTokens(nextTokens);
+      await pushMarket({ tokens: nextTokens });
       return next;
     },
-    [tokens],
+    [needWallet, pushMarket, tokens],
   );
 
   const resolveLaunchStandard = useCallback(
@@ -479,7 +583,7 @@ export function useEarth() {
   );
 
   const createLaunchCoin = useCallback(
-    (input: {
+    async (input: {
       standardId: string;
       symbol: string;
       name: string;
@@ -487,9 +591,10 @@ export function useEarth() {
       logo?: string;
       socials?: TokenSocials;
     }) => {
+      const owner = needWallet();
       const standard = resolveLaunchStandard(input.standardId);
       const factory = findFactory(standard.id);
-      const decimals = factory?.defaultDecimals ?? 6;
+      const decimals = Math.min(factory?.defaultDecimals ?? 6, 9);
       const decErr = validateDecimals(decimals, standard.amountWidth);
       if (decErr) throw new Error(decErr);
       if (!input.name.trim()) throw new Error("Give the coin a name.");
@@ -499,12 +604,14 @@ export function useEarth() {
 
       let config: ListedToken["config"];
       if (factory) {
-        const values = fillAgentDefaults(defaultVariableValues(factory), wallet);
+        const values = fillAgentDefaults(defaultVariableValues(factory), owner);
         if (values.totalSupply != null) values.totalSupply = "1000000000";
         config = parseMintConfig(factory, values);
       }
 
-      const { token } = addTokenToStandard(standard.id, {
+      const vault = (await settle("allocVault", {})).vault;
+      if (!vault) throw new Error("Could not open a launch vault.");
+      const { token } = await addTokenToStandard(standard.id, {
         symbol: input.symbol,
         name: input.name,
         decimals,
@@ -512,6 +619,8 @@ export function useEarth() {
         logo: input.logo,
         description,
         socials: input.socials,
+        destination: vault,
+        lockSupply: true,
       });
 
       const curve = initialCurve(token.decimals);
@@ -519,7 +628,7 @@ export function useEarth() {
         id: makeId("launch"),
         mint: token.mint,
         standardId: standard.id,
-        creator: wallet,
+        creator: owner,
         createdAt: Date.now(),
         virtualSol: curve.virtualSol.toString(),
         virtualTokens: curve.virtualTokens.toString(),
@@ -529,47 +638,23 @@ export function useEarth() {
         lpTokenReserve: lpTokenReserve(token.decimals).toString(),
         feeBps: curve.feeBps,
         graduated: false,
+        vault,
       };
-      setLaunches((prev) => [coin, ...prev]);
+      const nextLaunches = [coin, ...launches];
+      setLaunches(nextLaunches);
+      await pushMarket({ tokens: [...tokens.filter((t) => t.mint !== token.mint), token], launches: nextLaunches });
       return { token, coin, standard };
     },
-    [addTokenToStandard, resolveLaunchStandard, wallet],
-  );
-
-  const graduateLaunch = useCallback(
-    (coin: LaunchpadCoin, token: ListedToken) => {
-      if (coin.graduated) return coin;
-      const quote = tokens.find((t) => t.mint === WSOL);
-      if (!quote) throw new Error("SOL is not listed.");
-      const remainingCurve = BigInt(coin.virtualTokens);
-      const reserved = BigInt(coin.lpTokenReserve);
-      const solRaised = BigInt(coin.realSolRaised);
-      if (remainingCurve + reserved <= 0n || solRaised <= 0n) {
-        throw new Error("Not enough reserves to open the pool.");
-      }
-      const pool = createPairPool({
-        tokenA: token,
-        tokenB: quote,
-        amountA: remainingCurve + reserved,
-        amountB: solRaised,
-        curve: "constant-product",
-        feeBps: 30,
-        lockLp: true,
-      });
-      const next: LaunchpadCoin = { ...coin, graduated: true, poolId: pool.id };
-      setLaunches((prev) => prev.map((row) => (row.id === coin.id ? next : row)));
-      return next;
-    },
-    [createPairPool, tokens],
+    [addTokenToStandard, launches, needWallet, pushMarket, resolveLaunchStandard, tokens],
   );
 
   const tradeLaunch = useCallback(
-    (mint: string, side: "buy" | "sell", rawAmount: string) => {
+    async (mint: string, side: "buy" | "sell", rawAmount: string) => {
+      const owner = needWallet();
       const coin = launches.find((row) => row.mint === mint);
       const token = tokens.find((t) => t.mint === mint);
-      if (!coin || !token) throw new Error("Coin not found.");
+      if (!coin?.vault || !token) throw new Error("Coin not found.");
       if (coin.graduated) throw new Error("This coin already graduated. Trade it on the Earth pool.");
-      const owner = wallet ?? "local";
       const state = {
         virtualSol: BigInt(coin.virtualSol),
         virtualTokens: BigInt(coin.virtualTokens),
@@ -582,34 +667,47 @@ export function useEarth() {
         side === "buy"
           ? quoteBuy(state, parseAmount(rawAmount, 9))
           : quoteSell(state, parseAmount(rawAmount, token.decimals));
-      if (side === "sell") {
-        const held = launchHoldings.find((h) => h.mint === mint && h.owner === owner);
-        if (!held || BigInt(held.amount) < quote.amountIn) {
-          throw new Error("You do not have that many tokens on this launch.");
-        }
-      }
-      const next: LaunchpadCoin = {
-        ...coin,
+      await runSettle("launchTrade", {
+        mint,
+        vault: coin.vault,
+        side,
+        amountIn: quote.amountIn.toString(),
+        amountOut: quote.amountOut.toString(),
         virtualSol: quote.virtualSol.toString(),
         virtualTokens: quote.virtualTokens.toString(),
         realSolRaised: quote.realSolRaised.toString(),
         tokensSold: quote.tokensSold.toString(),
-      };
-      setLaunches((prev) => prev.map((row) => (row.id === coin.id ? next : row)));
-      setLaunchHoldings((prev) => {
-        const held = prev.find((h) => h.mint === mint && h.owner === owner);
-        const delta = side === "buy" ? quote.amountOut : -quote.amountIn;
-        const nextAmt = (held ? BigInt(held.amount) : 0n) + delta;
-        if (nextAmt < 0n) throw new Error("You do not have enough of this coin.");
-        const rest = prev.filter((h) => !(h.mint === mint && h.owner === owner));
-        if (nextAmt === 0n) return rest;
-        return [...rest, { mint, owner, amount: nextAmt.toString() }];
+        graduates: quote.graduates,
       });
-      let graduated = next;
-      if (quote.graduates) graduated = graduateLaunch(next, token);
+      let graduated = { ...coin, ...quote, graduated: quote.graduates };
+      if (quote.graduates) {
+        const done = await settle("graduate", { mint, user: owner });
+        if (done.state) applyMarket(done.state, owner);
+      }
       return { coin: graduated, quote, token, side };
     },
-    [graduateLaunch, launchHoldings, launches, tokens, wallet],
+    [applyMarket, launches, needWallet, runSettle, tokens],
+  );
+
+  const executeRoute = useCallback(
+    async (route: RouteQuote) => {
+      needWallet();
+      if (route.executable !== "earth") throw new Error("No executable Earth route.");
+      for (const hop of route.hops) {
+        if (!hop.poolId) continue;
+        const pool = pools.find((p) => p.id === hop.poolId);
+        if (!pool?.vault) throw new Error("Earth pool is missing its vault.");
+        await runSettle("swap", {
+          poolId: pool.id,
+          vault: pool.vault,
+          inMint: hop.inMint,
+          outMint: hop.outMint,
+          amountIn: hop.poolAmountIn ?? hop.amountIn,
+          amountOut: hop.poolAmountOut ?? hop.amountOut,
+        });
+      }
+    },
+    [needWallet, pools, runSettle],
   );
 
   return {
@@ -644,6 +742,7 @@ export function useEarth() {
     withdrawFromPool,
     createLaunchCoin,
     tradeLaunch,
+    executeRoute,
   };
 }
 

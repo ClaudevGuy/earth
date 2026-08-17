@@ -9,11 +9,6 @@
   directory = "netlify/functions"
 
 [[redirects]]
-  from = "/api/jupiter-quote"
-  to = "/.netlify/functions/jupiter-quote"
-  status = 200
-
-[[redirects]]
   from = "/api/rpc"
   to = "/.netlify/functions/rpc"
   status = 200
@@ -26,6 +21,16 @@
 [[redirects]]
   from = "/api/standards"
   to = "/.netlify/functions/standards"
+  status = 200
+
+[[redirects]]
+  from = "/api/market"
+  to = "/.netlify/functions/market"
+  status = 200
+
+[[redirects]]
+  from = "/api/settle"
+  to = "/.netlify/functions/settle"
   status = 200
 
 [[redirects]]

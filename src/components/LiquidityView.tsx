@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { EarthState } from "../useEarth";
 import type { CurveKind, ListedToken, PairFocus } from "../types";
 import { TokenSelect } from "./TokenSelect.tsx";
-import { formatAmount, parseAmount } from "../lib/amounts.ts";
+import { parseAmount } from "../lib/amounts.ts";
 import { findPool } from "../amm/pools.ts";
-import { findToken } from "../data/tokens.ts";
 import { findStandard } from "../adapters/registry.ts";
 import { WSOL } from "../lib/constants.ts";
 
@@ -24,6 +23,7 @@ export function LiquidityView({
   const [curve, setCurve] = useState<CurveKind>("constant-product");
   const [feeBps, setFeeBps] = useState("30");
   const [note, setNote] = useState<string>();
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!focus?.mintA) return;
@@ -41,11 +41,13 @@ export function LiquidityView({
   const amountA = useMemo(() => parseAmount(rawA || "0", tokenA.decimals), [rawA, tokenA.decimals]);
   const amountB = useMemo(() => parseAmount(rawB || "0", tokenB.decimals), [rawB, tokenB.decimals]);
 
-  function deposit() {
+  async function deposit() {
     setNote(undefined);
+    setBusy(true);
     try {
+      if (!earth.wallet) throw new Error("Connect Earth Wallet to deposit real tokens.");
       if (!existing) {
-        earth.createPairPool({
+        await earth.createPairPool({
           tokenA,
           tokenB,
           amountA,
@@ -53,30 +55,31 @@ export function LiquidityView({
           curve,
           feeBps: Number(feeBps) || 30,
         });
-        setNote(`Created ${tokenA.symbol}/${tokenB.symbol} (${stdA?.name ?? "?"} × ${stdB?.name ?? "?"}).`);
+        setNote(`Created ${tokenA.symbol}/${tokenB.symbol} (${stdA?.name ?? "?"} × ${stdB?.name ?? "?"}). Tokens moved into the Earth pool vault.`);
         return;
       }
       const orderedA = existing.tokenA === tokenA.mint ? amountA : amountB;
       const orderedB = existing.tokenA === tokenA.mint ? amountB : amountA;
-      const shares = earth.depositToPool(existing.id, orderedA, orderedB);
-      setNote(`Added liquidity. LP shares +${shares.toString()}`);
+      await earth.depositToPool(existing.id, orderedA, orderedB);
+      setNote(`Added liquidity to ${tokenA.symbol}/${tokenB.symbol}.`);
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Could not add liquidity.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  function withdraw() {
+  async function withdraw() {
     setNote(undefined);
+    setBusy(true);
     try {
       if (!existing) throw new Error("No pool for this pair.");
-      const { amountA: outA, amountB: outB } = earth.withdrawFromPool(existing.id);
-      const ta = findToken(existing.tokenA, earth.tokens);
-      const tb = findToken(existing.tokenB, earth.tokens);
-      setNote(
-        `Withdrew ${ta ? formatAmount(outA, ta.decimals) : outA} ${ta?.symbol} and ${tb ? formatAmount(outB, tb.decimals) : outB} ${tb?.symbol}.`,
-      );
+      await earth.withdrawFromPool(existing.id);
+      setNote(`Withdrew LP from ${tokenA.symbol}/${tokenB.symbol}.`);
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Could not withdraw.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -88,8 +91,8 @@ export function LiquidityView({
           <span>{existing ? "Existing pool" : "New pool"}</span>
         </div>
         <p className="notice">
-          Any registered standard can be pooled, including custom u128 adapters. Pair two listed tokens and seed
-          reserves.
+          Pair two listed tokens. Deposits move the tokens into an Earth pool vault. Swaps settle on-chain through that
+          vault. Until a pair has an Earth pool, it does not trade on Earth.
         </p>
         <label>
           Token A · {stdA?.name ?? "unknown standard"}
@@ -121,10 +124,10 @@ export function LiquidityView({
           </div>
         ) : null}
         <div className="row-actions">
-          <button type="button" className="primary" onClick={deposit}>
-            {existing ? "Add liquidity" : "Create pool"}
+          <button type="button" className="primary" onClick={() => void deposit()} disabled={busy}>
+            {busy ? "Confirm in wallet…" : existing ? "Add liquidity" : "Create pool"}
           </button>
-          <button type="button" className="ghost" onClick={withdraw} disabled={!position}>
+          <button type="button" className="ghost" onClick={() => void withdraw()} disabled={!position || busy}>
             Withdraw LP
           </button>
         </div>
@@ -136,8 +139,8 @@ export function LiquidityView({
         </div>
         <p className="notice">
           {stdA?.amountWidth === "u128" || stdB?.amountWidth === "u128"
-            ? "This pair uses a u128 adapter. Earth can pool it; Phantom and Jupiter will not see it until they add the same adapter."
-            : "Both sides are u64. If they are SPL / Token-2022, Jupiter can quote them when an API key is set."}
+            ? "This pair uses a u128 adapter. Earth can pool it; other wallets will not see it until they add the same adapter."
+            : "Both sides are u64. Open an Earth pool to make this pair tradable on the DEX."}
         </p>
         {position && existing ? (
           <p className="notice" style={{ marginTop: 12 }}>

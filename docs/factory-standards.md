@@ -1,8 +1,8 @@
 # Factory token standards
 
-Earth ships **five factory programs**. You do not write a program. You pick a factory, fill the variables, and create a contract. Earth already deployed these programs. Kind and amount width are fixed.
+Earth ships **nine factory programs**. You do not write a program. You pick a factory, fill the variables, and create a contract. Earth already deployed these programs. Kind and amount width are fixed.
 
-Each Earth-made standard has a **Standard ID** in the form `TSxxxN`. The five factories are `TSxxx1`–`TSxxx5`. Any standard you create next is `TSxxx6`, then `TSxxx7`, and so on. For those, you burn $1,000 of $EARTH and Earth deploys a new program.
+Each Earth-made standard has a **Standard ID** in the form `TSxxxN`. The nine factories are `TSxxx1`–`TSxxx9`. Any standard you create next is `TSxxx10`, then `TSxxx11`, and so on. For those, you burn $1,000 of $EARTH and Earth deploys a new program.
 
 Fair launches with virtual SOL liquidity are **Launchpad**, not a factory. See [Launchpad](launchpad.md).
 
@@ -13,8 +13,12 @@ Fair launches with virtual SOL liquidity are **Launchpad**, not a factory. See [
 | **Confidential (ZK ElGamal)** | `TSxxx3` | Private balances | optional auditor, auto-approve, pending window |
 | **Vested lock** | `TSxxx4` | Team / investor allocations | supply, cliff, vest duration, start delay, revocable, beneficiary |
 | **Mandate** | `TSxxx5` | AI-agent native tokens | supply, levy, endowment, epoch cap, epoch hours, per-ACT cap, cooldown, operator, 1–3 allowed destinations, mandate text |
+| **Kernel** | `TSxxx6` | Precompile-style system contracts | supply, kernel slot, syscall fee, hash / recover / identity flags |
+| **Proxy** | `TSxxx7` | Upgradeable token shells | supply, implementation, upgrade delay, admin, freeze |
+| **Flash** | `TSxxx8` | Atomic uncollateralized credit | supply, flash premium, max flash, vault reserve, enabled |
+| **Chamber** | `TSxxx9` | DAO governance | supply, quorum, proposal threshold, voting period, timelock, treasury levy, guardian |
 
-On-chain sources live in `programs/`. Preview contracts are local until those programs are deployed. See [Adapter spec](adapter-spec.md) for the shared account layout.
+On-chain sources live in `programs/`. Factory create mints as SPL / Token-2022 until those factory programs are deployed. See [Adapter spec](adapter-spec.md) for the shared account layout.
 
 ## Memecoin
 
@@ -24,7 +28,7 @@ Earth quotes apply the levy so the number you see is what the buyer or seller ac
 
 ## Reflect / burn
 
-Every transfer (including pool swaps) takes `reflection + burn + treasury` bps, capped at 25%. Reflection accrues to holders pro-rata on chain. In the preview the levy is deducted from the transfer; the holder index is not simulated.
+Every transfer (including pool swaps) takes `reflection + burn + treasury` bps, capped at 25%. Reflection accrues to holders pro-rata on chain. Earth quotes deduct the levy from the transfer.
 
 ## Confidential (ZK ElGamal)
 
@@ -40,7 +44,7 @@ Balances are ElGamal ciphertexts. A transfer does not move a public `u64`. The c
 
 Optional auditor pubkey can decrypt. Auto-approve lets new accounts receive credits. Pending window is the Token-2022-style apply-pending delay.
 
-That native proof program is **disabled on mainnet** until Solana finishes audits (June 2025 incident). You can still create a preview contract here. Do not treat encrypted preview balances as production privacy.
+That native proof program is **disabled on mainnet** until Solana finishes audits (June 2025 incident). You can still create a Confidential contract. Do not treat encrypted balances as production privacy.
 
 ## Vested lock
 
@@ -63,6 +67,30 @@ The program is the agent’s body. The model stays off-chain. English in the man
 | Pause `act` (transfers still work) | |
 
 `act` credits a token account only if that account’s **owner** is on the allowlist, the operator signed, both caps pass, and cooldown has elapsed. Earth does not run the model. Earth Wallet will show and send the token; it will not submit `act`.
+
+## Kernel
+
+Ethereum keeps privileged operations at fixed **precompile** addresses (ecrecover, SHA-256, identity, …). Kernel is that idea as a token standard: the contract sits at a reserved **kernel slot** (1–16), transfers are a normal Earth adapter, and extra instructions are syscalls.
+
+| Syscall | Ethereum analog | What it does |
+| --- | --- | --- |
+| `hash` (3) | SHA-256 precompile | Stores SHA-256 of the payload on the contract |
+| `recover` (4) | ecrecover | Records a signer pubkey as the recovered identity |
+| `identity` (5) | identity precompile | Copies up to 32 bytes of payload onto the contract |
+
+Each syscall can charge a flat token fee into the kernel treasury (gas analog). Enable at least one syscall. Earth Wallet sends transfer `1` only.
+
+## Proxy
+
+Ethereum **upgradeable proxies** (transparent / UUPS, EIP-1967) keep one address while swapping implementation. Proxy is that idea as a token: holders keep this contract address. The admin proposes a new implementation pubkey; after the delay anyone can commit. Freeze is one-way (renounce analog). Transfers always run through this program so the Earth adapter layout never moves. Earth Wallet will not propose or commit upgrades.
+
+## Flash
+
+Ethereum **flash-loan** providers lend without collateral if the borrow is repaid in the same transaction plus a premium. Flash is that idea as a token. A share of the first mint seeds an on-chain vault. `flash_borrow` (3) credits a draw only if a later `flash_repay` (4) is in the same Solana transaction (Instructions sysvar). Repay returns the draw plus `flashPremiumBps`. Transfers fail while a flash is outstanding. Earth Wallet will not open a flash loan.
+
+## Chamber
+
+Ethereum **Governor + timelock + voting-token** systems let holders propose, vote, queue, and execute without a middleman. Chamber is that idea as a token: 1 token = 1 vote (or the account’s delegate). One active proposal sits on the contract. For-votes must beat against-votes and hit quorum; then a timelock; then execute records the action hash (this factory does not CPI an arbitrary program). Optional `treasuryBps` levies transfers into the DAO treasury — Earth quotes apply that levy. Earth Wallet will show and send the token; it will not vote or execute.
 
 ## What you do not enter
 

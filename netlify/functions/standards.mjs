@@ -7,17 +7,6 @@ const CORS = {
 
 const SEED = [
   {
-    id: "meridian-u128",
-    name: "Meridian (u128)",
-    kind: "custom",
-    programId: "MeridianU128Preview11111111111111111111111",
-    amountWidth: "u128",
-    notes:
-      "Built-in example adapter for 128-bit amounts. Anyone can create a contract on it.",
-    publisher: "earth",
-    publishedAt: 0,
-  },
-  {
     id: "TSxxx1",
     name: "Memecoin",
     kind: "custom",

@@ -14,9 +14,9 @@ import { EarthSpin } from "./components/EarthSpin.tsx";
 import { Mark } from "./components/Mark.tsx";
 
 const NAV: { id: Page; label: string }[] = [
+  { id: "dex", label: "DEX" },
   { id: "trade", label: "Trade" },
   { id: "launchpad", label: "Launchpad" },
-  { id: "swap", label: "Swap" },
   { id: "pools", label: "Pools" },
   { id: "liquidity", label: "Liquidity" },
   { id: "standards", label: "Standards" },
@@ -30,7 +30,8 @@ function inboundStandards() {
   const adopt = q.get("adopt") ?? undefined;
   const std = q.get("std") ?? undefined;
   const pageParam = q.get("page");
-  const page = pageParam && PAGES.has(pageParam as Page) ? (pageParam as Page) : undefined;
+  const normalized = pageParam === "swap" ? "dex" : pageParam;
+  const page = normalized && PAGES.has(normalized as Page) ? (normalized as Page) : undefined;
   if (adopt || std || page) {
     const url = new URL(window.location.href);
     window.history.replaceState({}, "", `${url.pathname}${url.hash}`);
@@ -45,7 +46,7 @@ export default function App() {
   const [page, setPage] = useState<Page>(() => {
     if (inbound.page) return inbound.page;
     if (inbound.adopt || inbound.std) return "standards";
-    return "trade";
+    return "dex";
   });
   const [focus, setFocus] = useState<PairFocus>();
   const [docsChapter, setDocsChapter] = useState<string>();
@@ -62,7 +63,7 @@ export default function App() {
           <Mark size={38} />
           <div>
             <h1>Earth</h1>
-            <p>Solana market</p>
+            <p>Solana DEX</p>
           </div>
         </div>
         <nav className="nav">
@@ -121,10 +122,39 @@ export default function App() {
             <h2>How Earth works.</h2>
             <p className="lede">
               Create a token standard: upload the contract source (it is public), burn $1,000 of $EARTH, Earth deploys
-              it. Then create a contract, open a pool, and use Earth Wallet — including what is still protocol preview.
+              it. Then create a contract, open a pool, and trade with Earth Wallet.
             </p>
           </div>
           <EarthSpin />
+        </section>
+      ) : page === "dex" ? (
+        <section className="hero">
+          <div>
+            <p className="kicker">DEX</p>
+            <h2>Swap any listed standard on Earth.</h2>
+            <p className="lede">
+              Pick two tokens. Earth quotes its own pools — CPMM, stable, and two-hop. Confirm in Earth Wallet. Charts
+              and launchpad coins live under Trade.
+            </p>
+          </div>
+          <div className="stat-row">
+            <div className="stat">
+              <span>Pools</span>
+              <strong>{earth.pools.length}</strong>
+            </div>
+            <div className="stat">
+              <span>On the curve</span>
+              <strong>{earth.launches.filter((c) => !c.graduated).length}</strong>
+            </div>
+            <div className="stat">
+              <span>Listed tokens</span>
+              <strong>{earth.tokens.length}</strong>
+            </div>
+            <div className="stat">
+              <span>Standards</span>
+              <strong>{earth.standards.length}</strong>
+            </div>
+          </div>
         </section>
       ) : page === "launchpad" ? (
         <section className="hero">
@@ -161,10 +191,11 @@ export default function App() {
             <p className="kicker">Public registry</p>
             <h2>Create a contract. Or burn $EARTH for a new standard.</h2>
             <p className="lede">
-              For an AI-agent token: Standards → Create a contract → click Mandate (TSxxx5). That is a factory contract,
-              not a new standard, and not Launchpad. There is no Launch curve factory. The other factories are memecoin,
-              reflect/burn, confidential ZK ElGamal, and vested lock. Want a fair launch with virtual liquidity? Use
-              Launchpad. Want your own program? Create a standard, upload source, burn $1,000 of $EARTH.
+              Earth ships nine token factories. Mandate (TSxxx5) is AI-agent native. Kernel, Proxy, Flash, and Chamber
+              are the Ethereum special-contract types: precompiles, upgradeable shells, flash credit, and DAO
+              governance. Create a contract on a factory — not a new standard, not Launchpad. Want a fair launch with
+              virtual liquidity? Use Launchpad. Want your own program? Create a standard, upload source, burn $1,000 of
+              $EARTH.
             </p>
           </div>
           <div className="stat-row">
@@ -189,12 +220,12 @@ export default function App() {
       ) : page !== "trade" ? (
         <section className="hero">
           <div>
-            <p className="kicker">AMM · Aggregator · Adapters</p>
+            <p className="kicker">Earth</p>
             <h2>One ground for every Solana standard.</h2>
             <p className="lede">
               Create a contract, or burn $1,000 of $EARTH for a new standard Earth deploys for you — including u128
-              adapters that SPL venues reject. SPL and Token-2022 are native. Jupiter is an optional extra venue for SPL
-              pairs. Full walkthroughs live under Docs.
+              adapters that SPL venues reject. Swap on the DEX. Chart and fill on Trade, including launchpad coins
+              still on the curve.
             </p>
           </div>
           <div className="stat-row">
@@ -218,10 +249,24 @@ export default function App() {
         </section>
       ) : null}
 
-      {page === "trade" ? (
-        <TradeView earth={earth} feed={feed} focus={focus} onAddLiquidity={(next) => openPair("liquidity", next)} />
+      {page === "dex" ? (
+        <SwapView
+          earth={earth}
+          focus={focus}
+          feed={feed}
+          onOpenTrade={(next) => openPair("trade", next)}
+          onOpenLaunchpad={() => setPage("launchpad")}
+        />
       ) : null}
-      {page === "swap" ? <SwapView earth={earth} focus={focus} feed={feed} /> : null}
+      {page === "trade" ? (
+        <TradeView
+          earth={earth}
+          feed={feed}
+          focus={focus}
+          onAddLiquidity={(next) => openPair("liquidity", next)}
+          onOpenLaunchpad={() => setPage("launchpad")}
+        />
+      ) : null}
       {page === "pools" ? <PoolsView earth={earth} feed={feed} onOpenPair={(next) => openPair("trade", next)} /> : null}
       {page === "liquidity" ? <LiquidityView earth={earth} focus={focus} /> : null}
       {page === "launchpad" ? <LaunchpadView earth={earth} onOpenPair={openPair} /> : null}
@@ -242,10 +287,8 @@ export default function App() {
       ) : null}
 
       <footer className="footer">
-        Netlify hosts the app. Earth AMM math runs in the client as protocol preview. The Trade terminal charts Earth
-        pool series, shows AMM depth, and fills listed pairs on Earth CPMM / Stable / multi-hop routes. Deploying the
-        matching on-chain program is a later step. Published standards live in the Earth catalog so other users can
-        find them and mint their own tokens. The indexer prices pools from reserves and optional external market caps.{" "}
+        Earth is the DEX. Swap listed tokens, chart them on Trade, and launch coins that graduate into Earth pools.
+        Factory contracts mint on-chain.{" "}
         <button type="button" className="linkish" onClick={() => setPage("docs")}>
           Read the user guide
         </button>

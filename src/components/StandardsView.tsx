@@ -32,7 +32,7 @@ export function StandardsView({
   adoptCode,
 }: {
   earth: EarthState;
-  onOpenPair: (page: "swap" | "liquidity" | "trade", focus: PairFocus) => void;
+  onOpenPair: (page: "trade" | "liquidity" | "dex", focus: PairFocus) => void;
   focusId?: string;
   adoptCode?: string;
 }) {
@@ -179,25 +179,31 @@ export function StandardsView({
 
   function addToken(standardId: string) {
     setError(undefined);
-    try {
-      const factory = findFactory(standardId);
-      const config = factory ? parseMintConfig(factory, fillAgentDefaults(addVars, earth.wallet)) : undefined;
-      const { token } = earth.addTokenToStandard(standardId, {
-        symbol: addSymbol,
-        name: addName,
-        mint: addMint,
-        decimals: Number(addDecimals),
-        config,
-      });
-      setAddFor(undefined);
-      setAddSymbol("");
-      setAddName("");
-      setAddMint("");
-      setAddVars({});
-      setNote(`${token.symbol} listed on this standard. Lock authorities so Trade marks it Safe, or create a pool from this card.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the contract.");
-    }
+    setBusy(true);
+    void (async () => {
+      try {
+        if (!earth.wallet) throw new Error("Connect Earth Wallet to mint on-chain.");
+        const factory = findFactory(standardId);
+        const config = factory ? parseMintConfig(factory, fillAgentDefaults(addVars, earth.wallet)) : undefined;
+        const { token } = await earth.addTokenToStandard(standardId, {
+          symbol: addSymbol,
+          name: addName,
+          mint: addMint,
+          decimals: Number(addDecimals),
+          config,
+        });
+        setAddFor(undefined);
+        setAddSymbol("");
+        setAddName("");
+        setAddMint("");
+        setAddVars({});
+        setNote(`${token.symbol} minted. Lock authorities so DEX marks it Safe, or create a pool from this card.`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not create the contract.");
+      } finally {
+        setBusy(false);
+      }
+    })();
   }
 
   function adoptFromBox() {
@@ -260,9 +266,9 @@ export function StandardsView({
               </span>
             </div>
             <p className="notice">
-              A standard is a program. Mandate (TSxxx5) is the AI-agent factory — open Create a contract and pick that
-              card. Do not look for Launch curve; that row is gone. Use a factory to create a contract in a few fields,
-              or burn {createFeeLabel} for a new standard of your own. Native SPL and Token-2022 stay here.
+              A standard is a program. Earth ships nine factories (Mandate, Kernel, Proxy, Flash, Chamber, and the
+              rest). Open Create a contract and pick a card — do not look for Launch curve. Or burn {createFeeLabel} for
+              a new standard of your own. Native SPL and Token-2022 stay here.
             </p>
             <input
               className="search-field"
@@ -355,7 +361,7 @@ export function StandardsView({
               <span className="pill">{lockable.length}</span>
             </div>
             <p className="notice">
-              Lock supply, revoke freeze, and freeze metadata. When all three are done, Trade marks the ticker Safe —
+              Lock supply, revoke freeze, and freeze metadata. When all three are done, DEX marks the ticker Safe —
               supply and name cannot be changed.
             </p>
             {lockable.length === 0 ? (
@@ -423,7 +429,7 @@ export function StandardsView({
             </p>
             <label>
               Standard name
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meridian" />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Aurora" />
             </label>
             <label>
               Amount size
@@ -505,8 +511,8 @@ export function StandardsView({
                   ? ` Quoted at the current $EARTH price for $${STANDARD_CREATE_FEE_USD.toLocaleString()}.`
                   : ` Amount in $EARTH is quoted from the live price when $EARTH is trading.`}
                 {createFee.mintSet
-                  ? " No $EARTH is taken in this protocol preview."
-                  : " $EARTH is not live yet, so nothing is taken in this protocol preview."}
+                  ? " Earth Wallet will burn that $EARTH when the mint is configured."
+                  : " $EARTH is not listed yet, so this listing is free until the mint goes live."}
                 {earth.wallet
                   ? ` When the burn is live, it comes from ${shortAddress(earth.wallet, 4)}.`
                   : " Connect Earth Wallet so the burn can come from your account when $EARTH is live."}
@@ -524,11 +530,11 @@ export function StandardsView({
               <>
                 <label>
                   Token ticker
-                  <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="MRD" />
+                  <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="FROG" />
                 </label>
                 <label>
                   Token name
-                  <input value={tokenName} onChange={(e) => setTokenName(e.target.value)} placeholder="Meridian" />
+                  <input value={tokenName} onChange={(e) => setTokenName(e.target.value)} placeholder="Forest Frog" />
                 </label>
                 <label>
                   Decimals
@@ -651,7 +657,7 @@ function StandardCard({
   setAddDecimals: (v: string) => void;
   setAddVars: (v: Record<string, string>) => void;
   onAddToken: (id: string) => void;
-  onOpenPair: (page: "swap" | "liquidity" | "trade", focus: PairFocus) => void;
+  onOpenPair: (page: "trade" | "liquidity" | "dex", focus: PairFocus) => void;
   onCopied: (msg: string) => void;
   onError: (msg: string) => void;
   onLock: (mint: string) => void;
@@ -700,7 +706,7 @@ function StandardCard({
         ))}
       <div>
         {listed.length === 0 ? (
-          <p className="notice">No contracts on this standard in this browser yet. Create one below.</p>
+          <p className="notice">No contracts on this standard yet. Create one below — Earth mints it on-chain.</p>
         ) : (
           listed.map((token) => {
             const pooled = earth.pools.filter((p) => p.tokenA === token.mint || p.tokenB === token.mint);

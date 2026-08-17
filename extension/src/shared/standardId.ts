@@ -9,6 +9,10 @@ export const FACTORY_STANDARD_IDS = {
   confidential: "TSxxx3",
   vesting: "TSxxx4",
   agent: "TSxxx5",
+  kernel: "TSxxx6",
+  proxy: "TSxxx7",
+  flash: "TSxxx8",
+  chamber: "TSxxx9",
 } as const;
 
 export const FACTORY_ID_ALIASES: Record<string, string> = {
@@ -17,9 +21,13 @@ export const FACTORY_ID_ALIASES: Record<string, string> = {
   "earth-confidential": FACTORY_STANDARD_IDS.confidential,
   "earth-vesting": FACTORY_STANDARD_IDS.vesting,
   "earth-agent": FACTORY_STANDARD_IDS.agent,
+  "earth-kernel": FACTORY_STANDARD_IDS.kernel,
+  "earth-proxy": FACTORY_STANDARD_IDS.proxy,
+  "earth-flash": FACTORY_STANDARD_IDS.flash,
+  "earth-chamber": FACTORY_STANDARD_IDS.chamber,
 };
 
-export const RESERVED_STANDARD_SEQ = 5;
+export const RESERVED_STANDARD_SEQ = 9;
 
 export function isEarthStandardId(id: string): boolean {
   return TS_ID.test(id.trim());

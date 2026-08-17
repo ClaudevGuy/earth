@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EarthState } from "../useEarth";
-import type { ListedToken, PairFocus, RouteQuote } from "../types";
+import type { ListedToken, PairFocus } from "../types";
 import { TokenSelect } from "./TokenSelect.tsx";
 import { formatAmount, parseAmount } from "../lib/amounts.ts";
 import type { IndexerFeed } from "../indexer/useIndexer.ts";
 import { amountUsd } from "../indexer/value.ts";
 import { bpsLabel, formatUsdish } from "../lib/format.ts";
-import { canUseJupiter, pickBest, quoteEarthRoutes, quoteJupiter } from "../aggregator/router.ts";
-import { executeEarthRoute } from "../amm/execute.ts";
+import { pickBest, quoteEarthRoutes } from "../aggregator/router.ts";
 import { findToken } from "../data/tokens.ts";
 import { WSOL } from "../lib/constants.ts";
-import { recordRouteFill } from "../market/tape.ts";
 
 function FlipIcon() {
   return (
@@ -30,17 +28,20 @@ export function SwapView({
   earth,
   focus,
   feed,
+  onOpenTrade,
+  onOpenLaunchpad,
 }: {
   earth: EarthState;
   focus?: PairFocus;
   feed: IndexerFeed;
+  onOpenTrade?: (next: PairFocus) => void;
+  onOpenLaunchpad?: () => void;
 }) {
   const sol = earth.tokens.find((t) => t.mint === WSOL) ?? earth.tokens[0]!;
   const usdc = earth.tokens.find((t) => t.symbol === "USDC") ?? earth.tokens[1] ?? sol;
   const [input, setInput] = useState<ListedToken>(sol);
   const [output, setOutput] = useState<ListedToken>(usdc);
   const [rawIn, setRawIn] = useState("1");
-  const [routes, setRoutes] = useState<RouteQuote[]>([]);
   const [picked, setPicked] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -59,26 +60,12 @@ export function SwapView({
     [earth.pools, earth.tokens, input.mint, output.mint, amountIn],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      const extra =
-        canUseJupiter(input, output, earth.standards) && amountIn > 0n
-          ? await quoteJupiter(input.mint, output.mint, amountIn)
-          : null;
-      if (cancelled) return;
-      const merged = extra ? [...earthQuotes, extra] : earthQuotes;
-      merged.sort((a, b) => (BigInt(a.amountOut) < BigInt(b.amountOut) ? 1 : -1));
-      setRoutes(merged);
-      setPicked(pickBest(merged)?.id);
-    }
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [earthQuotes, earth.standards, input, output, amountIn]);
-
+  const routes = earthQuotes;
   const selected = routes.find((r) => r.id === picked) ?? routes[0];
+
+  useEffect(() => {
+    setPicked(pickBest(earthQuotes)?.id);
+  }, [earthQuotes]);
   const inBal = earth.balances.get(input.mint);
   const outPreview = selected ? formatAmount(BigInt(selected.amountOut), output.decimals) : "0";
   const inUsd = amountUsd(amountIn, input, feed.markets.get(input.mint), feed.solUsd);
@@ -91,18 +78,16 @@ export function SwapView({
     setOutput(input);
   }
 
-  function execute() {
+  async function execute() {
     if (!selected) return;
-    if (selected.executable !== "earth") {
-      setMessage("Jupiter execution needs a Netlify JUPITER_API_KEY and a live swap path. Earth AMM routes execute here.");
+    if (!earth.wallet) {
+      setMessage("Connect Earth Wallet to swap.");
       return;
     }
     setBusy(true);
     try {
-      const pools = executeEarthRoute(earth.pools, selected);
-      earth.setPools(pools);
-      recordRouteFill({ route: selected, tokens: earth.tokens, poolsAfter: pools });
-      setMessage(`Filled on ${selected.venue}. Earth AMM is in protocol preview: reserves update in this browser until the on-chain program is deployed.`);
+      await earth.executeRoute(selected);
+      setMessage(`Filled on ${selected.venue}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Swap failed");
     } finally {
@@ -111,11 +96,12 @@ export function SwapView({
   }
 
   return (
+    <div className="dex-layout">
     <div className="swap-grid">
       <section className="panel pad">
         <div className="panel-head">
           <span>Swap</span>
-          <span>{selected ? selected.venue : "No route"}</span>
+          <span>{selected ? selected.venue : "Earth DEX"}</span>
         </div>
         <div className="field-label">
           <span>You pay</span>
@@ -150,9 +136,19 @@ export function SwapView({
         </div>
         <div className="row-actions">
           <button type="button" className="primary wide" disabled={!selected || busy || amountIn <= 0n} onClick={execute}>
-            {busy ? "Routing…" : "Swap on best Earth route"}
+            {busy ? "Confirm in wallet…" : "Swap"}
           </button>
         </div>
+        {onOpenTrade ? (
+          <button
+            type="button"
+            className="ghost wide"
+            style={{ marginTop: 10 }}
+            onClick={() => onOpenTrade({ mintA: output.mint, mintB: input.mint })}
+          >
+            Open {output.symbol}/{input.symbol} on Trade
+          </button>
+        ) : null}
         {message ? <p className="notice" style={{ marginTop: 14 }}>{message}</p> : null}
       </section>
       <aside className="panel pad">
@@ -163,7 +159,12 @@ export function SwapView({
           </span>
         </div>
         <div className="routes">
-          {routes.length === 0 ? <p className="notice">No pool yet for this pair. Create one under Liquidity.</p> : null}
+          {routes.length === 0 ? (
+            <p className="notice">
+              No Earth pool for this pair yet. Create one under Liquidity
+              {onOpenLaunchpad ? ", or launch a coin on Launchpad." : "."}
+            </p>
+          ) : null}
           {routes.map((route) => {
             const token = findToken(output.mint, earth.tokens) ?? output;
             const best = route.id === selected?.id;
@@ -189,7 +190,13 @@ export function SwapView({
             );
           })}
         </div>
+        {onOpenLaunchpad ? (
+          <button type="button" className="ghost wide" style={{ marginTop: 14 }} onClick={onOpenLaunchpad}>
+            Open Launchpad
+          </button>
+        ) : null}
       </aside>
+    </div>
     </div>
   );
 }

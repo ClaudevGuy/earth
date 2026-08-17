@@ -24,7 +24,7 @@ export const DOCS: DocsChapter[] = [
   {
     id: "start",
     title: "Getting started",
-    blurb: "What Earth is, what is preview, and where to click first.",
+    blurb: "What Earth is, and where to click first.",
     blocks: [
       {
         type: "p",
@@ -33,43 +33,43 @@ export const DOCS: DocsChapter[] = [
       {
         type: "ul",
         items: [
-          "A market: trade terminal, swap, pools, and liquidity for any listed token.",
+          "A market: DEX, swap, pools, and liquidity for any listed token.",
           "A registry: you upload public contract source, burn $1,000 of $EARTH, Earth deploys the program, you create contracts on it, and Earth quotes and pools them.",
           "A wallet: Earth Wallet holds SPL, Token-2022, and custom adapters, including u128 amounts other wallets still reject.",
         ],
       },
       {
         type: "callout",
-        kind: "warn",
-        text: "AMM math runs in this browser as protocol preview. Pool reserves persist locally until the matching on-chain Earth program is deployed. Registering a standard allowlists it in this UI — it is not an audit, and not a Jupiter listing.",
+        kind: "info",
+        text: "Earth is the DEX for every standard it lists. Pools and the launchpad settle on-chain through shared vaults. Registering a standard allowlists it here — it is not an audit.",
       },
       { type: "h3", text: "First 10 minutes" },
       {
         type: "ol",
         items: [
-          "Install Earth Wallet (Chrome extension) if needed, then Connect Earth Wallet from the header. Preview trades still run without a wallet.",
-          "On Trade, pick a listed pair, read the chart, and buy or sell on the Earth AMM ticket.",
-          "On Swap, try SOL → USDC, then MRD → SOL. Meridian is the built-in custom u128 example.",
-          "On Launchpad, pick a live standard and launch a coin (name, ticker, logo, description, socials) with virtual SOL liquidity.",
+          "Install Earth Wallet (Chrome extension) if needed, then Connect Earth Wallet from the header. You need a wallet to mint, swap, or LP.",
+          "On DEX, swap any two listed tokens. Earth quotes its own pools.",
+          "On Trade, chart Earth pools and launchpad coins on the curve. Buy or sell from the ticket.",
+          "On Launchpad, pick a live standard and launch a coin. It shows on Trade as TICKER/SOL until it graduates.",
           "On Standards, Create a contract → Mandate (TSxxx5) for an AI-agent token. Other factories are variables-only too. Or upload public contract source and burn $1,000 of $EARTH for a new standard Earth deploys.",
-          "On Liquidity, add another pair or add size to an existing pool.",
+          "On Liquidity, open an Earth pool. Deposits move tokens into the pool vault.",
         ],
       },
       {
         type: "table",
         headers: ["Tab", "Use it to"],
         rows: [
-          ["Trade", "Chart, depth, tape, and buy/sell against an Earth pool (including custom u128 pairs)"],
-          ["Swap", "Quote Earth CPMM, Earth Stable, two-hop routes, and optional Jupiter; execute Earth routes"],
+          ["DEX", "Swap any two listed tokens on Earth pools (CPMM, stable, two-hop)"],
+          ["Trade", "Chart, depth, tape, and buy/sell — Earth pools and launchpad coins on the curve"],
+          ["Launchpad", "Mint a coin on a live standard into a curve vault; graduate into a locked Earth pool"],
           ["Pools", "See reserves, indexed USD, fee, and which standards sit on each side"],
-          ["Liquidity", "Create a pool or add / withdraw LP"],
-          ["Launchpad", "Create a coin on a live standard with virtual SOL; graduate into a locked Earth pool"],
+          ["Liquidity", "Create a pool or add / withdraw LP — tokens move on-chain"],
           ["Standards", "Create a contract on a factory, upload public source and burn $1,000 of $EARTH for a new standard"],
         ],
       },
       {
         type: "p",
-        text: "Web-app tokens, pools, and LP shares live in this browser (localStorage). Published standards go to the Earth catalog so other users can find them. Clearing site data resets local listings. Earth Wallet stores an encrypted vault in the Chrome profile; the seed never leaves the device.",
+        text: "The live book (tokens, pools, launches, LP, tape) is shared for every visitor. Earth Wallet stores an encrypted vault in the Chrome profile; the seed never leaves the device.",
       },
     ],
   },
@@ -86,13 +86,13 @@ export const DOCS: DocsChapter[] = [
         type: "table",
         headers: ["Field", "Meaning"],
         rows: [
-          ["Standard ID", "Assigned as TSxxx1, TSxxx2, TSxxx3, … — factories are TSxxx1–TSxxx5; each new standard gets the next number"],
-          ["Name", "Human label, e.g. Meridian"],
+          ["Standard ID", "Assigned as TSxxx1, TSxxx2, TSxxx3, … — factories are TSxxx1–TSxxx9; each new standard gets the next number"],
+          ["Name", "Human label, e.g. Aurora"],
           ["Source", "Required. The token contract code. Public on the card and in the catalog"],
           ["Program", "Earth deploys this from your source. You burn $1,000 of $EARTH; you do not paste an address"],
           ["Kind", "custom for standards Earth deploys; spl-token / token-2022 are the native rows"],
           ["Amount width", "u64 (SPL-sized) or u128 (18-decimal supplies that do not fit SPL)"],
-          ["Review", "native (built-in), registered (seeded example), or unverified (you or someone else burned $EARTH to create it)"],
+          ["Review", "native (built-in), registered (factory), or unverified (you or someone else burned $EARTH to create it)"],
         ],
       },
       { type: "h3", text: "Create and publish" },
@@ -102,7 +102,7 @@ export const DOCS: DocsChapter[] = [
           "Open Standards → Create a standard. Give it a name (required).",
           "Amount size: Large (u128) for 18-decimal supplies; Normal (u64) to match SPL. u64 cannot use more than 12 decimals.",
           "Upload or paste the token contract source. It is required and public. Text only — not a ZIP or .so.",
-          "You burn $1,000 of $EARTH (quoted from the live $EARTH price). Earth deploys that source and holds upgrade authority. $EARTH is not live yet, so nothing is taken in this protocol preview.",
+          "You burn $1,000 of $EARTH (quoted from the live $EARTH price). Earth deploys that source and holds upgrade authority. Until $EARTH is listed, new standards are free to publish.",
           "Leave Publish checked so other users can find it. Optionally create your first contract in the same click — you can skip that.",
           "Click Create standard. Copy the share link from the card if the catalog is local-only.",
         ],
@@ -125,8 +125,8 @@ export const DOCS: DocsChapter[] = [
       {
         type: "ul",
         items: [
-          "Preview: Earth assigns a local program handle (earthprog:…). Name the token, pick decimals, and pool it locally.",
-          "Live: the same click burns $1,000 of $EARTH from Earth Wallet. Earth deploys the source you published. You never copy-paste a program address.",
+          "Until $EARTH is listed, publishing a new standard is free. Once VITE_EARTH_MINT is set, the same click burns $1,000 of $EARTH from Earth Wallet. Earth deploys the source you published. You never copy-paste a program address.",
+          "Factory contracts mint on-chain into Earth Wallet (SPL or Token-2022). Custom program IDs that are not live on Solana are not sent to RPC — the wallet will warn and keep those balances at zero.",
           "Wallet: paste a standard ID (or share code) under Earth Wallet → Standards. The site registry and the wallet registry are separate. Do not paste a program ID in the wallet.",
         ],
       },
@@ -137,18 +137,18 @@ export const DOCS: DocsChapter[] = [
       },
       {
         type: "p",
-        text: "Built-in: SPL Token and Token-2022 (native, u64), Meridian (u128) as a public catalog example, plus five factories — memecoin, reflect/burn, confidential ZK ElGamal, vested lock, and Mandate (AI-agent native). Create a contract on a factory from Standards → Create a contract; you only fill variables. Fair launches with virtual liquidity are Launchpad.",
+        text: "Built-in: SPL Token and Token-2022 (native, u64), plus nine factories — memecoin, reflect/burn, confidential ZK ElGamal, vested lock, Mandate (AI-agent native), Kernel (precompiles), Proxy (upgradeable), Flash (flash loans), and Chamber (DAO). Create a contract on a factory from Standards → Create a contract; you only fill variables. Fair launches with virtual liquidity are Launchpad.",
       },
     ],
   },
   {
     id: "factories",
     title: "Factory token standards",
-    blurb: "Five Earth-built programs. Pick one, fill the variables, create a contract.",
+    blurb: "Nine Earth-built programs. Pick one, fill the variables, create a contract.",
     blocks: [
       {
         type: "p",
-        text: "Earth ships five factory programs (Standard IDs TSxxx1–TSxxx5). You do not set a program ID, kind, or amount width. Open Standards → Create a contract, pick a factory, and fill the variables. New custom standards you create get TSxxx6, TSxxx7, and so on — you burn $1,000 of $EARTH, Earth deploys those. Fair launches with virtual liquidity live on Launchpad, not as a factory.",
+        text: "Earth ships nine factory programs (Standard IDs TSxxx1–TSxxx9). You do not set a program ID, kind, or amount width. Open Standards → Create a contract, pick a factory, and fill the variables. New custom standards you create get TSxxx10, TSxxx11, and so on — you burn $1,000 of $EARTH, Earth deploys those. Fair launches with virtual liquidity live on Launchpad, not as a factory.",
       },
       {
         type: "table",
@@ -159,22 +159,26 @@ export const DOCS: DocsChapter[] = [
           ["Confidential (ZK ElGamal)", "TSxxx3", "Optional auditor, auto-approve, pending window. Proofs verify on ZkE1Gama1Proof11111111111111111111111111111"],
           ["Vested lock", "TSxxx4", "Supply, cliff, vest duration, start delay, revocable, beneficiary"],
           ["Mandate", "TSxxx5", "Supply, levy, endowment, epoch cap, epoch hours, per-ACT cap, cooldown, operator, 1–3 allowed destinations, mandate text"],
+          ["Kernel", "TSxxx6", "Supply, kernel slot, syscall fee, hash / recover / identity flags"],
+          ["Proxy", "TSxxx7", "Supply, implementation, upgrade delay, admin, freeze"],
+          ["Flash", "TSxxx8", "Supply, flash premium, max flash of vault, vault reserve, enabled"],
+          ["Chamber", "TSxxx9", "Supply, quorum, proposal threshold, voting period, timelock, treasury levy, guardian"],
         ],
       },
       {
         type: "callout",
         kind: "info",
-        text: "Mandate is AI-agent native. Create it from Standards → Create a contract → Mandate (TSxxx5). Not Launchpad, not Create a standard. There is no Launch curve factory. On-chain: allowlist, per-ACT cap, epoch cap, cooldown. English mandate text is hashed, not interpreted. Earth does not run the model.",
+        text: "Kernel, Proxy, Flash, and Chamber map Ethereum special-contract types onto Earth: precompiles, upgradeable proxies, flash loans, and DAO governors. Mandate is AI-agent native (TSxxx5). Create any of them from Standards → Create a contract. Not Launchpad, not Create a standard.",
       },
       {
         type: "callout",
         kind: "warn",
-        text: "The native ZK ElGamal proof program is disabled on mainnet pending Solana audits. Confidential preview contracts work locally; do not treat them as production privacy yet.",
+        text: "The native ZK ElGamal proof program is disabled on mainnet pending Solana audits. You can still create a Confidential contract; do not treat encrypted balances as production privacy yet.",
       },
       { type: "action", page: "standards", label: "Create a contract on a factory" },
       {
         type: "p",
-        text: "Memecoin, reflect, and Mandate levies are applied in Earth quotes: the amount out is what the trader receives after tax.",
+        text: "Memecoin, reflect, Mandate, and Chamber levies are applied in Earth quotes: the amount out is what the trader receives after tax.",
       },
     ],
   },
@@ -228,7 +232,7 @@ export const DOCS: DocsChapter[] = [
     blocks: [
       {
         type: "p",
-        text: "Launchpad is how you create a public coin on Earth. It is not a token standard. You pick a standard that is already live — SPL Token, Token-2022, a factory, Meridian, or any published custom adapter — then set name, ticker, logo, description, and socials.",
+        text: "Launchpad is how you create a public coin on Earth. It is not a token standard. You pick a standard that is already live — SPL Token, Token-2022, a factory, or any published custom adapter — then set name, ticker, logo, description, and socials.",
       },
       {
         type: "ol",
@@ -256,7 +260,7 @@ export const DOCS: DocsChapter[] = [
       {
         type: "callout",
         kind: "info",
-        text: "If you pick Memecoin, Reflect/burn, or Mandate, Launchpad applies that factory’s default variables. Change those from Standards if you need a custom tax or levy setup. Curve fills update this browser until the on-chain program is deployed.",
+        text: "If you pick Memecoin, Reflect/burn, Mandate, or Chamber, Launchpad applies that factory’s default variables. Change those from Standards if you need a custom tax or levy setup. Buys and sells settle on-chain through the coin’s vault. The coin also appears on Trade as TICKER/SOL until it graduates.",
       },
     ],
   },
@@ -280,14 +284,14 @@ export const DOCS: DocsChapter[] = [
       },
       {
         type: "p",
-        text: "Leave Mint blank to get a preview mint (earthmint:…). Paste a real mint if it already exists on chain. Duplicate mints are rejected. The same ticker cannot be listed twice on one standard.",
+        text: "Leave Mint blank to mint on-chain into your Earth Wallet (0–9 decimals). Paste a real mint if it already exists. Duplicate mints are rejected. The same ticker cannot be listed twice on one standard.",
       },
       { type: "h3", text: "What “mint” means here" },
       {
         type: "table",
         headers: ["Situation", "What to do"],
         rows: [
-          ["New custom token (like Meridian)", "Create the standard (or pick a public one), leave mint blank, optionally seed a preview pool. You can swap it on Earth in this browser immediately."],
+          ["New factory or custom token", "Create the standard (or pick a public one), leave mint blank. Earth mints on-chain. Optionally open a pool — deposits move tokens into the vault."],
           ["Mint already deployed on your program", "Paste that mint when listing. Register the same mint in Earth Wallet so balances can scan."],
           ["Normal SPL or Token-2022", "Create the mint with the usual Solana tools, then list that address on Earth under spl-token or token-2022. Earth does not replace the official mint instruction."],
           ["Show a zero row in the wallet", "List the mint anyway. The wallet still shows amount 0 until supply exists."],
@@ -296,7 +300,7 @@ export const DOCS: DocsChapter[] = [
       {
         type: "callout",
         kind: "warn",
-        text: "Listing on the website does not mint supply into your wallet. Preview mints are local catalog entries, not mainnet accounts. For SPL you receive tokens when someone transfers them or when you mint with the official program.",
+        text: "Listing on the website does not by itself put supply in your wallet. Factory create mints on-chain into Earth Wallet (0–9 decimals). For an existing SPL mint you receive tokens when someone transfers them.",
       },
       {
         type: "p",
@@ -333,7 +337,7 @@ export const DOCS: DocsChapter[] = [
         type: "ul",
         items: [
           "Constant product (Earth CPMM): Uniswap-v2 style. amountOut = reserveOut × dx / (reserveIn + dx), where dx is input after fee. Use for unlike assets (SOL/USDC, your token/SOL). Default fee 30 bps (0.30%).",
-          "Stable (Earth Stable): near 1:1 for like-assets (USDC/USDT). Output stretches as size grows and is capped at 95% of the output reserve. Seed pool uses 4 bps.",
+          "Stable (Earth Stable): near 1:1 for like-assets (USDC/USDT). Output stretches as size grows and is capped at 95% of the output reserve. Typical fee is 4 bps.",
         ],
       },
       { type: "h3", text: "LP shares" },
@@ -367,84 +371,78 @@ export const DOCS: DocsChapter[] = [
       {
         type: "callout",
         kind: "info",
-        text: "Thin pools have high price impact. You are short the asset that pumps (impermanent loss); fees are the compensation. Seeded demo pools: SOL/USDC, USDC/USDT (stable), BONK/SOL, MRD/SOL. Reset seed liquidity restores those four and clears LP positions — including user-created pools in this browser.",
+        text: "Thin pools have high price impact. You are short the asset that pumps (impermanent loss); fees are the compensation. A pair does not trade on Earth until someone opens an Earth pool.",
       },
       {
         type: "callout",
         kind: "warn",
-        text: "Until the on-chain program is deployed, deposits, swaps, and withdrawals update this browser only. Do not deposit real funds expecting on-chain LP tokens yet.",
+        text: "Deposits, swaps, and withdrawals move tokens on-chain through the pool vault. Graduated launchpad LP cannot be withdrawn.",
       },
     ],
   },
   {
-    id: "trade",
-    title: "Trading terminal",
-    blurb: "Charts, tape, AMM depth, and market orders on listed Earth pairs.",
+    id: "dex",
+    title: "DEX",
+    blurb: "Swap any two listed tokens on Earth pools.",
     blocks: [
       {
         type: "p",
-        text: "Trade is the terminal for tokens listed on Earth. Every Earth pool is a market. Pick a pair on the left, read price and liquidity in the center, and send a market order on the right. Custom standards, including u128, trade here the same way SPL does.",
-      },
-      {
-        type: "ul",
-        items: [
-          "Candles are an Earth AMM series: a seeded history that ends at current pool reserves, then live fills from this browser.",
-          "24h change, high, low, and volume come from that series. USD last uses the indexer when it has a print.",
-          "Depth is the constant-product or stable curve walked in steps — not a CLOB. Size moves price.",
-          "Buy pays the quote token for the base; sell pays the base for the quote. Routes are the same Earth AMM paths as Swap.",
-        ],
-      },
-      { type: "action", page: "trade", label: "Open Trade" },
-      {
-        type: "callout",
-        kind: "info",
-        text: "Click a row on Pools, or Trade on a listed mint under Standards, to open that pair in the terminal. Tokens with no pool appear under Listed, no pool — create liquidity first.",
-      },
-      {
-        type: "callout",
-        kind: "warn",
-        text: "Fills update local pool reserves in this browser until the on-chain Earth program is deployed. Jupiter rows remain quote-only.",
-      },
-    ],
-  },
-  {
-    id: "swap",
-    title: "Swap routes",
-    blurb: "Compare Earth CPMM, stable, two-hop, and optional Jupiter, then fill an Earth route.",
-    blocks: [
-      {
-        type: "p",
-        text: "Swap is the route board. Use Trade when you want a chart and a buy/sell ticket on one pool. Use Swap when you want every path between two mints, including hops and Jupiter quotes.",
+        text: "DEX is the swap. Pick what you pay and what you receive. Earth quotes its own CPMM, stable, and two-hop routes, then fills through the pool vault in Earth Wallet. Charts live under Trade. Coins still on a bonding curve live under Launchpad and also appear on Trade.",
       },
       {
         type: "ol",
         items: [
-          "Choose pay token, receive token, and amount. Routes work without a wallet.",
+          "Choose pay token, receive token, and amount.",
           "Pick a route (best output is selected by default).",
-          "Swap on best Earth route. Jupiter rows are quotes only unless a live swap path is configured.",
+          "Swap. Confirm in Earth Wallet.",
         ],
       },
-      { type: "action", page: "swap", label: "Open Swap" },
+      { type: "action", page: "dex", label: "Open DEX" },
       {
         type: "table",
         headers: ["Venue", "When it appears"],
         rows: [
           ["Earth CPMM", "Direct constant-product pool"],
           ["Earth Stable", "Direct stable pool"],
-          ["Earth hop", "Two Earth pools sharing a middle mint (e.g. MRD → SOL → USDC)"],
-          ["Jupiter", "Both tokens are SPL or Token-2022, and a Jupiter key is configured"],
+          ["Earth hop", "Two Earth pools sharing a middle mint (e.g. your token → SOL → USDC)"],
         ],
       },
       {
         type: "p",
-        text: "Custom adapters never go to Jupiter. Two-hop takes a fee on each hop. Pool fee is feeBps / 10,000 of the input. Impact is extra slippage versus spot. Earth routes update local reserves; Jupiter rows are quotes only unless a live swap path is configured.",
+        text: "Two-hop takes a fee on each hop. Pool fee is feeBps / 10,000 of the input. Impact is extra slippage versus spot. There is no other DEX in the route — Earth is the venue.",
+      },
+    ],
+  },
+  {
+    id: "trade",
+    title: "Trading terminal",
+    blurb: "Charts, tape, AMM depth, and market orders on Earth pools and launchpad coins.",
+    blocks: [
+      {
+        type: "p",
+        text: "Trade is the terminal. Every Earth pool is a market. Every launchpad coin still on the curve is also a market, quoted against SOL. Pick a pair on the left, read price in the center, and send a market order on the right.",
+      },
+      {
+        type: "ul",
+        items: [
+          "Launchpad rows are labeled launch. Buys and sells fill the bonding curve until graduation, then the pair becomes an Earth pool.",
+          "Pool rows are Earth CPMM or stable. Depth is the curve walked in steps — not a CLOB.",
+          "Candles start at the current price and record live fills.",
+          "Open Launchpad from the market list to create a coin.",
+        ],
+      },
+      { type: "action", page: "trade", label: "Open Trade" },
+      {
+        type: "callout",
+        kind: "info",
+        text: "Click a row on Pools, Trade on a listed mint under Standards, or Open on Trade from a Launchpad coin to focus that pair here.",
       },
     ],
   },
   {
     id: "wallet",
     title: "Earth Wallet",
-    blurb: "The wallet we are building so every Earth standard can be held and sent.",
+    blurb: "Hold and send every Earth standard, including adapters other wallets reject.",
     blocks: [
       {
         type: "p",
@@ -478,7 +476,7 @@ export const DOCS: DocsChapter[] = [
           "Unlock to see balances grouped by standard. Lock from the header or footer. Default auto-lock is 15 minutes (0 = never).",
           "Receive: one address for SOL, SPL, Token-2022, and custom adapter accounts you own.",
           "Send: frozen and non-transferable mints cannot be sent. Custom adapters without a live program ID cannot send on chain.",
-          "Standards tab: paste a share code from the site, or register a standard and list mints. Seeded factories include Memecoin, Reflect, Confidential, Vest, and Mandate. Stored separately in the extension.",
+          "Standards tab: paste a share code from the site, or register a standard and list mints. Seeded factories include Memecoin, Reflect, Confidential, Vest, Mandate, Kernel, Proxy, Flash, and Chamber. Stored separately in the extension.",
           "Connecting to this site (or another dapp) opens an approve window. Settings lists connected origins; Forget drops trust. Sign requests each need approval.",
           "Settings: RPC, auto-lock, export seed (password required), refresh balances. Network label follows the RPC URL.",
         ],
@@ -486,7 +484,7 @@ export const DOCS: DocsChapter[] = [
       {
         type: "callout",
         kind: "info",
-        text: "The wallet does not create pools or run the AMM — do that on this site. It does not mint custom tokens by itself, and it does not run a Mandate operator or submit act. Preview program IDs are not sent to chain. This website only connects Earth Wallet.",
+        text: "The wallet does not create pools or run the AMM — do that on this site. It does not mint custom tokens by itself, and it does not run a Mandate operator or submit act. Program IDs that are not live Solana addresses are not sent to chain. This website only connects Earth Wallet.",
       },
     ],
   },
@@ -514,15 +512,15 @@ export const DOCS: DocsChapter[] = [
       },
       {
         type: "p",
-        text: "Transfer instruction: discriminator 1, then amount as 16-byte little-endian u128 (narrow on-chain if accounts are u64). Accounts in order: source (writable), destination (writable), mint (read-only), owner/payer (signer). Earth Wallet does not create a destination account yet — the recipient needs one on that mint first. Mandate keeps extra state on the mint (treasury, operator, mandate hash, epoch cap). The wallet sends transfer 1; the off-chain operator submits act (discriminator 3).",
+        text: "Transfer instruction: discriminator 1, then amount as 16-byte little-endian u128 (narrow on-chain if accounts are u64). Accounts in order: source (writable), destination (writable), mint (read-only), owner/payer (signer). Earth Wallet does not create a destination account yet — the recipient needs one on that mint first. Factories keep extra state on the mint (and Chamber also on the token account). The wallet sends transfer 1 only — not Mandate act, Kernel syscalls, Proxy upgrades, Flash borrow, or Chamber votes.",
       },
       {
         type: "p",
-        text: "Program ID must be a real base58 Solana address. Preview strings like earthprog:… are not sent to RPC. Declare u64 or u128 when you register; a mismatch shows a wrong balance.",
+        text: "Program ID must be a real base58 Solana address. Placeholder handles (earthprog:…) are not sent to RPC. Declare u64 or u128 when you register; a mismatch shows a wrong balance.",
       },
       {
         type: "p",
-        text: "The Earth AMM (next deploy) will store vaults, mints, token programs, amount widths, curve, fee, and LP mint per pool. Swaps CPI into the adapter. Amounts in the instruction are u128, then narrowed if the adapter is u64. Custom vaults will be owned by the Earth program, not by SPL.",
+        text: "Earth pools already settle through vaults the site coordinates. The on-chain AMM program (next deploy) will store vaults, mints, token programs, amount widths, curve, fee, and LP mint per pool, then CPI into the adapter on each swap. Amounts in the instruction are u128, then narrowed if the adapter is u64. Custom vaults will be owned by the Earth program, not by SPL.",
       },
     ],
   },
@@ -535,11 +533,9 @@ export const DOCS: DocsChapter[] = [
         type: "ul",
         items: [
           "Not an audit. Unverified means allowlisted here, not reviewed.",
-          "Not a listing on other wallets. Custom u128 tokens will not appear there until those products add an adapter.",
-          "Not Jupiter for custom standards. Jupiter is optional for SPL / Token-2022 when a key is set on Netlify.",
-          "Swaps, new pools, and LP in this UI do not move mainnet tokens until the Earth program is deployed.",
-          "Do not send real assets into a preview mint. Reset seed liquidity or clearing site data wipes local pools.",
-          "Earth Wallet seed and password are unrecoverable if lost.",
+          "Not a listing on other venues. Custom u128 tokens will not appear there until those products add an adapter.",
+          "Swaps, new pools, and LP move mainnet tokens through Earth vaults.",
+          "Connect Earth Wallet before you mint, swap, or LP. Seed and password are unrecoverable if lost.",
         ],
       },
     ],

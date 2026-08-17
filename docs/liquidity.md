@@ -2,7 +2,7 @@
 
 A pool is two listed tokens, two reserve balances, a curve, a fee, and LP shares. Anyone who deposits both sides gets shares of the pool; traders pay the fee into those reserves.
 
-Earth can pool **any two listed standards**, including a custom `u128` token against SOL. Phantom and Jupiter will not see that pair until they add the same adapter. Earth still can.
+Earth can pool **any two listed standards**, including a custom `u128` token against SOL. Other wallets will not see that pair until they add the same adapter. Earth still can.
 
 ## How liquidity works
 
@@ -22,7 +22,7 @@ You pick the curve only when **creating** a pool. You cannot change it later.
 
 ### Constant product (Earth CPMM)
 
-`reserveIn * reserveOut` stays approximately constant (after fees). This is the Uniswap-v2 style curve. Price moves as the mix of reserves changes. Use it for unlike assets (SOL/USDC, MRD/SOL, your token/SOL).
+`reserveIn * reserveOut` stays approximately constant (after fees). This is the Uniswap-v2 style curve. Price moves as the mix of reserves changes. Use it for unlike assets (SOL/USDC, your token/SOL).
 
 Quote (after fee):
 
@@ -36,7 +36,7 @@ Default fee is **30 bps** (0.30%). Fee is `feeBps / 10_000` of the input.
 
 For like-assets (USDC/USDT). The quote stays near 1:1, with a stretch as size grows, and output is capped at 95% of the output reserve so a pool cannot be emptied in one trade.
 
-Default fee in the USDC/USDT seed pool is **4 bps**. For a new stable pool you can still type any fee in bps.
+Default fee in a new USDC/USDT-style stable pool is often **4 bps**. For a new stable pool you can still type any fee in bps.
 
 ## LP shares
 
@@ -71,7 +71,7 @@ When creating a standard, check **Also create my first contract now** and **Crea
 | **Quote amount** | Seed size of SOL or USDC. This **sets the initial price**: `quote / base` |
 | **Fee (bps)** | 30 = 0.30% |
 
-Example: 1,000,000 MRD and 10 SOL implies 0.00001 SOL per MRD at start.
+Example: 1,000,000 of your token and 10 SOL implies 0.00001 SOL per token at start.
 
 Click **Create standard, contract, and pool**. Earth opens **Trade** on that pair. You receive 100% of the initial LP shares.
 
@@ -100,24 +100,17 @@ Same screen, existing pool: enter amounts for both tokens and **Add liquidity**.
 
 - **Spot** in a constant-product pool is `reserveOut / reserveIn` (in raw amounts; decimals differ per token).
 - **Price impact** on a swap is how much worse execution is than that spot, in bps.
-- **Pools** tab shows reserves and, when the indexer can price a side, approximate USD TVL. Custom preview contracts often show “—” until they have an Earth-pool price path to SOL/USDC.
+- **Pools** tab shows reserves and, when the indexer can price a side, approximate USD TVL. New tokens often show “—” until they have an Earth-pool price path to SOL/USDC.
 
 The indexer prices Earth pools from **local reserves**, plus optional external market caps for SPL mints. Status in the header: `indexer live` vs `indexer local`.
 
-## Seeded demo pools
+## Empty book
 
-On first load Earth seeds:
-
-- SOL/USDC — constant product, 30 bps
-- USDC/USDT — stable, 4 bps
-- BONK/SOL — constant product, 30 bps
-- MRD/SOL — constant product, 30 bps (Meridian `u128`)
-
-**Reset seed liquidity** on Pools restores those four and **clears LP positions**. User-created pools in `localStorage` are replaced too. Use it only to get back to the demo.
+Earth does not ship fake SOL/USDC reserves. On first load there are no Earth pools. Open an Earth pool under Liquidity to list a pair on the DEX.
 
 ## What LPs should know
 
 - You are short the asset that pumps and long the one that dumps (impermanent loss).
 - Thin pools have high price impact. Seed enough quote that a typical swap does not move the market violently.
 - Fees are the compensation for that risk. Higher `feeBps` protects LPs and costs traders.
-- Until the on-chain program is deployed, deposits, swaps, and withdrawals update **this browser only**. They are a full protocol preview of the math, not a mainnet custody event. Do not deposit real funds expecting on-chain LP tokens yet.
+- Deposits, swaps, and withdrawals move tokens on-chain through the pool vault. Graduated launchpad LP cannot be withdrawn.

@@ -65,7 +65,7 @@ export interface CatalogStandard {
 /** Mint-time variables for an Earth factory standard. */
 export type TokenMintConfig = Record<string, string | number | boolean>;
 
-/** One-way listing locks. All three true → the token is marked Safe on Trade. */
+/** One-way listing locks. All three true → the token is marked Safe on DEX. */
 export interface TokenLock {
   mintRevoked: boolean;
   freezeRevoked: boolean;
@@ -104,6 +104,7 @@ export interface LaunchpadCoin {
   feeBps: number;
   graduated: boolean;
   poolId?: string;
+  vault?: string;
 }
 
 export interface LaunchpadHolding {
@@ -124,11 +125,15 @@ export interface Pool {
   feeBps: number;
   curve: CurveKind;
   venue: "earth-cpmm" | "earth-stable";
+  vault?: string;
+  creator?: string;
+  locked?: boolean;
 }
 
 export interface LpPosition {
   poolId: string;
   shares: string;
+  owner?: string;
 }
 
 export interface QuoteHop {
@@ -152,11 +157,11 @@ export interface RouteQuote {
   amountOut: string;
   priceImpactBps: number;
   hops: QuoteHop[];
-  executable: "earth" | "jupiter" | "none";
+  executable: "earth" | "none";
   note?: string;
 }
 
-export type Page = "trade" | "swap" | "pools" | "liquidity" | "launchpad" | "standards" | "docs";
+export type Page = "dex" | "trade" | "pools" | "liquidity" | "launchpad" | "standards" | "docs";
 
 export interface PairFocus {
   mintA?: string;

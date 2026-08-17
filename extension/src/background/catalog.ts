@@ -85,7 +85,7 @@ export async function resolveStandardById(
   opts: { catalogUrl?: string; trustedOrigins?: string[] },
 ): Promise<TokenStandard> {
   const trimmed = raw.trim();
-  if (!trimmed) throw new Error("Enter a token standard ID (for example TSxxx6).");
+  if (!trimmed) throw new Error("Enter a token standard ID (for example TSxxx10).");
 
   if (!isEarthStandardId(trimmed) && !LOCAL.some((row) => row.id === trimmed || canonicalStandardId(row.id) === trimmed)) {
     try {

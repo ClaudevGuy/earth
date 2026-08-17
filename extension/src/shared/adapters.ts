@@ -25,15 +25,6 @@ export const NATIVE_STANDARDS: TokenStandard[] = [
 
 export const CUSTOM_SEED: TokenStandard[] = [
   {
-    id: "meridian-u128",
-    name: "Meridian (u128)",
-    kind: "custom",
-    programId: "earthprog:meridian-u128",
-    amountWidth: "u128",
-    review: "registered",
-    notes: "Preview adapter for 128-bit amounts. Earth deploys the program; the wallet scans it once it is on-chain.",
-  },
-  {
     id: "TSxxx1",
     name: "Memecoin",
     kind: "custom",
@@ -84,6 +75,46 @@ export const CUSTOM_SEED: TokenStandard[] = [
     notes:
       "Earth factory. AI-agent native. On-chain allowlist, per-ACT cap, epoch cap, cooldown. Create the contract on the Earth site: Standards → Create a contract → Mandate (TSxxx5). This wallet does not run the operator.",
   },
+  {
+    id: "TSxxx6",
+    name: "Kernel",
+    kind: "custom",
+    programId: "earthprog:kernel",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "kernel",
+    notes: "Earth factory. Precompile-style syscalls (hash, recover, identity) at a reserved slot. Create a contract on the Earth site.",
+  },
+  {
+    id: "TSxxx7",
+    name: "Proxy",
+    kind: "custom",
+    programId: "earthprog:proxy",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "proxy",
+    notes: "Earth factory. Upgradeable shell: same contract address, rotating implementation, optional freeze.",
+  },
+  {
+    id: "TSxxx8",
+    name: "Flash",
+    kind: "custom",
+    programId: "earthprog:flash",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "flash",
+    notes: "Earth factory. Atomic uncollateralized credit that must be repaid in the same transaction plus a premium.",
+  },
+  {
+    id: "TSxxx9",
+    name: "Chamber",
+    kind: "custom",
+    programId: "earthprog:chamber",
+    amountWidth: "u64",
+    review: "registered",
+    factory: "chamber",
+    notes: "Earth factory. DAO token: propose, vote, queue, execute. Optional treasury levy.",
+  },
 ];
 
 export const BUILTIN_TOKENS: ListedToken[] = [
@@ -112,14 +143,6 @@ export const BUILTIN_TOKENS: ListedToken[] = [
     name: "dogwifhat",
     decimals: 6,
     standardId: "spl-token",
-  },
-  {
-    mint: "MRD1111111111111111111111111111111111111111",
-    symbol: "MRD",
-    name: "Meridian",
-    decimals: 18,
-    standardId: "meridian-u128",
-    tags: ["custom", "u128"],
   },
 ];
 
@@ -170,6 +193,18 @@ export function reviewChecks(standard: TokenStandard): string[] {
     checks.push(
       "Mandate is on-chain: allowlist, per-ACT cap, epoch cap, cooldown. This wallet will not run the operator or submit act. Create the contract on the Earth site: Standards → Create a contract → Mandate (TSxxx5).",
     );
+  }
+  if (standard.factory === "kernel") {
+    checks.push("Kernel syscalls are extra instructions. This wallet sends transfers only.");
+  }
+  if (standard.factory === "proxy") {
+    checks.push("Proxy upgrades stay on-chain. This wallet will not propose or commit an implementation change.");
+  }
+  if (standard.factory === "flash") {
+    checks.push("Flash borrow/repay is not sent by this wallet. Transfers fail while a flash is outstanding.");
+  }
+  if (standard.factory === "chamber") {
+    checks.push("Chamber votes and executes are not sent by this wallet. It will show and send the token only.");
   }
   return checks;
 }

@@ -4,6 +4,9 @@ export type EarthProvider = {
   isConnected?: boolean;
   connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toBase58(): string } | null }>;
   disconnect?: () => Promise<void>;
+  signTransaction?: (tx: unknown) => Promise<unknown>;
+  signAllTransactions?: (txs: unknown[]) => Promise<unknown[]>;
+  signAndSendTransaction?: (tx: unknown) => Promise<{ signature?: string } | string>;
   on?: (event: string, handler: (...args: unknown[]) => void) => void;
   off?: (event: string, handler: (...args: unknown[]) => void) => void;
 };
@@ -49,6 +52,28 @@ export async function connectEarthWallet(opts?: { onlyIfTrusted?: boolean }): Pr
 
 export async function disconnectEarthWallet(): Promise<void> {
   await getEarthProvider()?.disconnect?.();
+}
+
+function signatureOf(result: { signature?: string } | string | null | undefined): string {
+  if (typeof result === "string" && result.length > 20) return result;
+  if (result && typeof result === "object" && typeof result.signature === "string") return result.signature;
+  throw new Error("Earth Wallet did not return a signature.");
+}
+
+export async function signAndSendTransaction(tx: unknown): Promise<string> {
+  const provider = getEarthProvider();
+  if (!provider?.signAndSendTransaction) {
+    throw new Error("Unlock Earth Wallet and connect this site to sign.");
+  }
+  return signatureOf(await provider.signAndSendTransaction(tx));
+}
+
+export async function signTransaction<T>(tx: T): Promise<T> {
+  const provider = getEarthProvider();
+  if (!provider?.signTransaction) {
+    throw new Error("Unlock Earth Wallet and connect this site to sign.");
+  }
+  return (await provider.signTransaction(tx)) as T;
 }
 
 export function subscribeEarthWallet(handler: (address: string | undefined) => void): () => void {

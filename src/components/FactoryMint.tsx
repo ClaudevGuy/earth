@@ -14,7 +14,7 @@ export function FactoryMint({
   onError,
 }: {
   earth: EarthState;
-  onOpenPair: (page: "swap" | "liquidity" | "trade", focus: PairFocus) => void;
+  onOpenPair: (page: "trade" | "liquidity" | "dex", focus: PairFocus) => void;
   onDone: (msg: string) => void;
   onError: (msg: string) => void;
 }) {
@@ -44,12 +44,13 @@ export function FactoryMint({
     setMakePool(false);
   }
 
-  function createContract() {
+  async function createContract() {
     onError("");
     setBusy(true);
     try {
+      if (!earth.wallet) throw new Error("Connect Earth Wallet to mint on-chain.");
       const config = parseMintConfig(factory, fillAgentDefaults(vars, earth.wallet));
-      const { token, pool } = earth.addTokenToStandard(factory.standard.id, {
+      const { token, pool } = await earth.addTokenToStandard(factory.standard.id, {
         symbol,
         name: tokenName,
         decimals: Number(decimals),
@@ -66,7 +67,7 @@ export function FactoryMint({
         return;
       }
       onDone(
-        `${token.symbol} is live on ${factory.standard.name} (${factory.standard.id}). Earth already deployed this factory — you only set the contract variables.`,
+        `${token.symbol} minted on ${factory.standard.name} (${factory.standard.id}). The mint is in your Earth Wallet.`,
       );
       setSymbol("");
       setTokenName("");
@@ -84,8 +85,9 @@ export function FactoryMint({
           <span>Pick a factory</span>
         </div>
         <p className="notice">
-          These five programs are Earth-built. For an AI-agent token, click <strong>Mandate</strong> (TSxxx5) — that
-          card is first. Do not use Launchpad. Do not use Create a standard. There is no Launch curve factory.
+          These nine programs are Earth-built. Mandate (TSxxx5) is the AI-agent factory. Kernel, Proxy, Flash, and
+          Chamber are precompile, upgradeable-proxy, flash-loan, and DAO analogs. Pick a card, fill the variables, and
+          create a contract. Do not use Launchpad or Create a standard for that.
         </p>
         <div className="factory-grid">
           {FACTORIES.map((row) => (
@@ -151,8 +153,8 @@ export function FactoryMint({
             </label>
           </div>
         ) : null}
-        <button type="button" className="primary" onClick={createContract} disabled={busy}>
-          Create contract
+        <button type="button" className="primary" onClick={() => void createContract()} disabled={busy}>
+          {busy ? "Minting…" : "Create contract"}
         </button>
       </section>
     </div>

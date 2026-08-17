@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EarthState } from "../useEarth";
-import type { PairFocus, RouteQuote } from "../types";
+import type { PairFocus } from "../types";
 import type { IndexerFeed } from "../indexer/useIndexer";
 import { amountUsd } from "../indexer/value";
-import { executeEarthRoute } from "../amm/execute";
 import { findPool } from "../amm/pools";
-import { canUseJupiter, pickBest, quoteEarthRoutes, quoteJupiter } from "../aggregator/router";
+import { pickBest, quoteEarthRoutes } from "../aggregator/router";
 import { findToken } from "../data/tokens";
 import { formatAmount, parseAmount } from "../lib/amounts";
 import { bpsLabel, formatPct, formatPrice, formatUsdish } from "../lib/format";
 import { WSOL } from "../lib/constants";
+import { quoteBuy, quoteSell, progressBps, spotSolPerToken, type CurveQuote } from "../launchpad/curve";
 import { ammDepth } from "../market/depth";
 import { invertCandles, spotPrice, uiAmount } from "../market/price";
-import { nativeCandles, statsFromCandles } from "../market/series";
-import { fillPrice, fillSide, fillsForPair, recordRouteFill } from "../market/tape";
+import { candlesForId, nativeCandles, statsFromCandles } from "../market/series";
+import { fillPrice, fillSide, fillsForPair } from "../market/tape";
 import { TIMEFRAMES, type Timeframe } from "../market/types";
 import { useMarketTick } from "../market/useMarketTick";
 import { CandleChart } from "./CandleChart";
@@ -21,19 +21,34 @@ import { TokenAvatar } from "./TokenAvatar";
 
 const PCTS = [25, 50, 75, 100];
 
+function launchMarketId(mint: string) {
+  return `launch:${mint}`;
+}
+
+function launchHolding(earth: EarthState, mint: string): bigint {
+  const owner = earth.wallet ?? "local";
+  const row = earth.launchHoldings.find((h) => h.mint === mint && h.owner === owner);
+  return row ? BigInt(row.amount) : 0n;
+}
+
 export function TradeView({
   earth,
   feed,
   focus,
   onAddLiquidity,
+  onOpenLaunchpad,
 }: {
   earth: EarthState;
   feed: IndexerFeed;
   focus?: PairFocus;
   onAddLiquidity: (next: PairFocus) => void;
+  onOpenLaunchpad: () => void;
 }) {
   const tick = useMarketTick();
-  const [poolId, setPoolId] = useState(earth.pools[0]?.id);
+  const liveLaunches = earth.launches.filter((c) => !c.graduated);
+  const [marketId, setMarketId] = useState(
+    earth.pools[0]?.id ?? (liveLaunches[0] ? launchMarketId(liveLaunches[0].mint) : undefined),
+  );
   const [flipped, setFlipped] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -45,45 +60,70 @@ export function TradeView({
 
   useEffect(() => {
     if (!focus?.mintA) return;
+    const live = earth.launches.find((c) => !c.graduated && c.mint === focus.mintA);
+    if (live) {
+      setMarketId(launchMarketId(live.mint));
+      setFlipped(false);
+      return;
+    }
     const found = findPool(earth.pools, focus.mintA, focus.mintB ?? WSOL);
     if (found) {
-      setPoolId(found.id);
+      setMarketId(found.id);
       setFlipped(found.tokenA !== focus.mintA);
     }
-  }, [focus?.mintA, focus?.mintB, earth.pools]);
+  }, [focus?.mintA, focus?.mintB, earth.pools, earth.launches]);
 
   useEffect(() => {
-    if (poolId && earth.pools.some((p) => p.id === poolId)) return;
-    setPoolId(earth.pools[0]?.id);
-  }, [earth.pools, poolId]);
+    if (marketId?.startsWith("launch:")) {
+      const mint = marketId.slice(7);
+      const live = earth.launches.find((c) => c.mint === mint);
+      if (live && !live.graduated) return;
+      if (live?.graduated && live.poolId) {
+        setMarketId(live.poolId);
+        return;
+      }
+    }
+    if (marketId && earth.pools.some((p) => p.id === marketId)) return;
+    const firstLaunch = earth.launches.find((c) => !c.graduated);
+    setMarketId(earth.pools[0]?.id ?? (firstLaunch ? launchMarketId(firstLaunch.mint) : undefined));
+  }, [earth.pools, earth.launches, marketId]);
 
-  const pool = earth.pools.find((p) => p.id === poolId);
-  const nativeBase = pool ? findToken(pool.tokenA, earth.tokens) : undefined;
-  const nativeQuote = pool ? findToken(pool.tokenB, earth.tokens) : undefined;
-  const base = flipped ? nativeQuote : nativeBase;
-  const quote = flipped ? nativeBase : nativeQuote;
+  const launchMint = marketId?.startsWith("launch:") ? marketId.slice(7) : undefined;
+  const launch = launchMint ? earth.launches.find((c) => c.mint === launchMint && !c.graduated) : undefined;
+  const pool = launch ? undefined : earth.pools.find((p) => p.id === marketId);
+  const sol = findToken(WSOL, earth.tokens);
+  const launchToken = launch ? findToken(launch.mint, earth.tokens) : undefined;
+  const nativeBase = launch ? launchToken : pool ? findToken(pool.tokenA, earth.tokens) : undefined;
+  const nativeQuote = launch ? sol : pool ? findToken(pool.tokenB, earth.tokens) : undefined;
+  const base = flipped && !launch ? nativeQuote : nativeBase;
+  const quote = flipped && !launch ? nativeBase : nativeQuote;
+
+  const last = launch && launchToken
+    ? spotSolPerToken(BigInt(launch.virtualSol), BigInt(launch.virtualTokens), launchToken.decimals)
+    : pool && base && quote
+      ? spotPrice(pool, base.mint, quote.mint, earth.tokens)
+      : 0;
 
   const nativeSeries = useMemo(() => {
+    if (launch && last > 0) return candlesForId(launchMarketId(launch.mint), last, timeframe);
     if (!pool) return [];
     return nativeCandles(pool, earth.tokens, timeframe);
-  }, [pool, earth.tokens, timeframe, earth.pools, tick]);
-
+  }, [launch, last, pool, earth.tokens, timeframe, earth.pools, earth.launches, tick]);
   const candles = useMemo(
-    () => (flipped ? invertCandles(nativeSeries) : nativeSeries),
-    [flipped, nativeSeries],
+    () => (flipped && !launch ? invertCandles(nativeSeries) : nativeSeries),
+    [flipped, launch, nativeSeries],
   );
-
-  const last = pool && base && quote ? spotPrice(pool, base.mint, quote.mint, earth.tokens) : 0;
-  const nativeLast =
-    pool && nativeBase && nativeQuote ? spotPrice(pool, nativeBase.mint, nativeQuote.mint, earth.tokens) : 0;
   const stats = useMemo(() => statsFromCandles(candles, last), [candles, last]);
   const depth = useMemo(
     () => (pool && base && quote ? ammDepth(pool, base.mint, quote.mint, earth.tokens) : { bids: [], asks: [] }),
     [pool, base, quote, earth.tokens, earth.pools],
   );
   const tape = useMemo(
-    () => (pool && nativeBase && nativeQuote ? fillsForPair(pool, nativeBase, nativeQuote, nativeLast) : []),
-    [pool, nativeBase, nativeQuote, nativeLast, tick],
+    () =>
+      nativeBase && nativeQuote
+        ? fillsForPair(pool ?? { id: launch ? launchMarketId(launch.mint) : marketId }, nativeBase, nativeQuote)
+        : [],
+    [pool, launch, marketId, nativeBase, nativeQuote, tick],
   );
 
   const pay = side === "buy" ? quote : base;
@@ -94,53 +134,60 @@ export function TradeView({
   );
 
   const earthQuotes = useMemo(() => {
-    if (!pay || !receive) return [];
+    if (launch || !pay || !receive) return [];
     return quoteEarthRoutes(earth.pools, earth.tokens, pay.mint, receive.mint, amountIn);
-  }, [earth.pools, earth.tokens, pay, receive, amountIn]);
+  }, [launch, earth.pools, earth.tokens, pay, receive, amountIn]);
 
-  const [routes, setRoutes] = useState<RouteQuote[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      if (!pay || !receive) {
-        setRoutes([]);
-        return;
-      }
-      const extra =
-        canUseJupiter(pay, receive, earth.standards) && amountIn > 0n
-          ? await quoteJupiter(pay.mint, receive.mint, amountIn)
-          : null;
-      if (cancelled) return;
-      const merged = extra ? [...earthQuotes, extra] : earthQuotes;
-      merged.sort((a, b) => (BigInt(a.amountOut) < BigInt(b.amountOut) ? 1 : -1));
-      setRoutes(merged);
-      const exec = merged.find((r) => r.executable === "earth") ?? pickBest(merged);
-      setPicked(exec?.id);
-    }
-    void run();
-    return () => {
-      cancelled = true;
+  const launchQuote = useMemo((): CurveQuote | undefined => {
+    if (!launch || amountIn <= 0n) return undefined;
+    const state = {
+      virtualSol: BigInt(launch.virtualSol),
+      virtualTokens: BigInt(launch.virtualTokens),
+      realSolRaised: BigInt(launch.realSolRaised),
+      tokensSold: BigInt(launch.tokensSold),
+      graduationSol: BigInt(launch.graduationSol),
+      feeBps: launch.feeBps,
     };
-  }, [earthQuotes, earth.standards, pay, receive, amountIn]);
+    try {
+      return side === "buy" ? quoteBuy(state, amountIn) : quoteSell(state, amountIn);
+    } catch {
+      return undefined;
+    }
+  }, [launch, amountIn, side]);
 
-  const selected = routes.find((r) => r.id === picked) ?? routes.find((r) => r.executable === "earth") ?? routes[0];
-  const outPreview = selected && receive ? formatAmount(BigInt(selected.amountOut), receive.decimals) : "0";
-  const inBal = pay ? earth.balances.get(pay.mint) : undefined;
+  const routes = earthQuotes;
+  useEffect(() => {
+    setPicked(pickBest(earthQuotes)?.id);
+  }, [earthQuotes]);
+
+  const selected = routes.find((r) => r.id === picked) ?? routes[0];
+  const outPreview = launch
+    ? launchQuote && receive
+      ? formatAmount(launchQuote.amountOut, receive.decimals)
+      : "0"
+    : selected && receive
+      ? formatAmount(BigInt(selected.amountOut), receive.decimals)
+      : "0";
+  const launchBal = launch ? (side === "buy" ? earth.balances.get(WSOL) : launchHolding(earth, launch.mint)) : undefined;
+  const inBal = launch ? launchBal : pay ? earth.balances.get(pay.mint) : undefined;
   const inUsd = pay ? amountUsd(amountIn, pay, feed.markets.get(pay.mint), feed.solUsd) : 0;
   const outUsd =
-    selected && receive
-      ? amountUsd(BigInt(selected.amountOut), receive, feed.markets.get(receive.mint), feed.solUsd)
-      : 0;
+    launch && launchQuote && receive
+      ? amountUsd(launchQuote.amountOut, receive, feed.markets.get(receive.mint), feed.solUsd)
+      : selected && receive
+        ? amountUsd(BigInt(selected.amountOut), receive, feed.markets.get(receive.mint), feed.solUsd)
+        : 0;
   const lastUsd = base ? amountUsd(parseAmount("1", base.decimals), base, feed.markets.get(base.mint), feed.solUsd) : 0;
   const tvl =
     pool && nativeBase && nativeQuote
       ? amountUsd(BigInt(pool.reserveA), nativeBase, feed.markets.get(nativeBase.mint), feed.solUsd) +
         amountUsd(BigInt(pool.reserveB), nativeQuote, feed.markets.get(nativeQuote.mint), feed.solUsd)
       : 0;
+  const launchPct = launch ? progressBps(BigInt(launch.realSolRaised), BigInt(launch.graduationSol)) / 100 : 0;
 
   const markets = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return earth.pools
+    const earthRows = earth.pools
       .map((row) => {
         const a = findToken(row.tokenA, earth.tokens);
         const b = findToken(row.tokenB, earth.tokens);
@@ -155,19 +202,56 @@ export function TradeView({
         if (needle && !label.includes(needle) && !a.name.toLowerCase().includes(needle) && !b.name.toLowerCase().includes(needle)) {
           return null;
         }
-        return { pool: row, base: a, quote: b, price, changePct: st.changePct, tvl: usd, volume: st.volume };
+        return {
+          id: row.id,
+          kind: "pool" as const,
+          pool: row,
+          base: a,
+          quote: b,
+          price,
+          changePct: st.changePct,
+          tvl: usd,
+          volume: st.volume,
+          venue: row.venue.replace("earth-", ""),
+        };
       })
-      .filter((row): row is NonNullable<typeof row> => Boolean(row))
-      .sort((a, b) => b.tvl - a.tvl);
-  }, [earth.pools, earth.tokens, feed.markets, feed.solUsd, q, tick]);
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+    const launchRows = earth.launches
+      .filter((c) => !c.graduated)
+      .map((coin) => {
+        const a = findToken(coin.mint, earth.tokens);
+        const b = findToken(WSOL, earth.tokens);
+        if (!a || !b) return null;
+        const price = spotSolPerToken(BigInt(coin.virtualSol), BigInt(coin.virtualTokens), a.decimals);
+        const label = `${a.symbol}/${b.symbol}`.toLowerCase();
+        if (needle && !label.includes(needle) && !a.name.toLowerCase().includes(needle)) return null;
+        return {
+          id: launchMarketId(coin.mint),
+          kind: "launch" as const,
+          pool: undefined,
+          base: a,
+          quote: b,
+          price,
+          changePct: 0,
+          tvl: Number(BigInt(coin.realSolRaised)) / 1e9,
+          volume: 0,
+          venue: "launch",
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+    return [...launchRows, ...earthRows].sort((a, b) => b.tvl - a.tvl);
+  }, [earth.pools, earth.launches, earth.tokens, feed.markets, feed.solUsd, q, tick]);
 
   const unpooled = useMemo(() => {
     const pooled = new Set(earth.pools.flatMap((p) => [p.tokenA, p.tokenB]));
-    return earth.tokens.filter((t) => !pooled.has(t.mint) && t.mint !== WSOL);
-  }, [earth.pools, earth.tokens]);
+    const launching = new Set(earth.launches.filter((c) => !c.graduated).map((c) => c.mint));
+    return earth.tokens.filter((t) => !pooled.has(t.mint) && !launching.has(t.mint) && t.mint !== WSOL);
+  }, [earth.pools, earth.launches, earth.tokens]);
 
   const maxAsk = Math.max(...depth.asks.map((d) => d.total), 1);
   const maxBid = Math.max(...depth.bids.map((d) => d.total), 1);
+  const hasMarket = Boolean((pool || launch) && base && quote);
+  const canFill = launch ? Boolean(launchQuote) : Boolean(selected);
 
   function setPct(pct: number) {
     if (!pay || inBal === undefined) return;
@@ -175,18 +259,27 @@ export function TradeView({
     setRawIn(formatAmount(slice, pay.decimals));
   }
 
-  function execute() {
-    if (!selected || !base || !quote) return;
-    if (selected.executable !== "earth") {
-      setMessage("Jupiter is quote-only here. Pick an Earth AMM route to fill.");
+  async function execute() {
+    if (!base || !quote) return;
+    if (!earth.wallet) {
+      setMessage("Connect Earth Wallet to trade.");
       return;
     }
     setBusy(true);
     try {
-      const next = executeEarthRoute(earth.pools, selected);
-      earth.setPools(next);
-      recordRouteFill({ route: selected, tokens: earth.tokens, poolsAfter: next });
-      setMessage(`Filled ${side} ${base.symbol}/${quote.symbol} on ${selected.venue}. Preview reserves update in this browser.`);
+      if (launch) {
+        const result = await earth.tradeLaunch(launch.mint, side, rawIn);
+        if (result.coin.graduated) {
+          setMessage(`${base.symbol} graduated. It now trades as an Earth pool.`);
+          if (result.coin.poolId) setMarketId(result.coin.poolId);
+        } else {
+          setMessage(`Filled ${side} ${base.symbol}/SOL on the launch curve.`);
+        }
+      } else {
+        if (!selected) return;
+        await earth.executeRoute(selected);
+        setMessage(`Filled ${side} ${base.symbol}/${quote.symbol} on ${selected.venue}.`);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Fill failed");
     } finally {
@@ -199,25 +292,25 @@ export function TradeView({
       <aside className="panel term-markets">
         <div className="panel-head tight">
           <span>Markets</span>
-          <span>{earth.pools.length} pools</span>
+          <span>{markets.length} pairs</span>
         </div>
         <input
           className="search-field"
-          placeholder="Search listed pairs"
+          placeholder="Search pools and launchpad"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         <div className="market-list">
           {markets.map((row) => {
-            const active = row.pool.id === poolId;
+            const active = row.id === marketId;
             const up = row.changePct >= 0;
             return (
               <button
-                key={row.pool.id}
+                key={row.id}
                 type="button"
                 className={`market-row${active ? " active" : ""}`}
                 onClick={() => {
-                  setPoolId(row.pool.id);
+                  setMarketId(row.id);
                   setFlipped(false);
                   setMessage(undefined);
                 }}
@@ -230,16 +323,21 @@ export function TradeView({
                   <strong>
                     {row.base.symbol}/{row.quote.symbol}
                   </strong>
-                  <div className="muted">{row.pool.venue.replace("earth-", "")}</div>
+                  <div className="muted">{row.venue}</div>
                 </span>
                 <span className="market-px">
                   <b className="mono">{formatPrice(row.price)}</b>
-                  <div className={up ? "up" : "down"}>{formatPct(row.changePct)}</div>
+                  <div className={row.kind === "launch" ? "muted" : up ? "up" : "down"}>
+                    {row.kind === "launch" ? "curve" : formatPct(row.changePct)}
+                  </div>
                 </span>
               </button>
             );
           })}
         </div>
+        <button type="button" className="ghost wide" style={{ margin: "10px 12px 0" }} onClick={onOpenLaunchpad}>
+          Launchpad
+        </button>
         {unpooled.length ? (
           <div className="unpooled">
             <div className="muted">Listed, no pool</div>
@@ -262,10 +360,16 @@ export function TradeView({
       </aside>
 
       <section className="term-main">
-        {pool && base && quote ? (
+        {hasMarket && base && quote ? (
           <>
             <header className="panel pad term-ticker">
-              <button type="button" className="pair-flip" onClick={() => setFlipped((v) => !v)}>
+              <button
+                type="button"
+                className="pair-flip"
+                onClick={() => {
+                  if (!launch) setFlipped((v) => !v);
+                }}
+              >
                 <span className="pair-marks">
                   <TokenAvatar symbol={base.symbol} size={32} />
                   <TokenAvatar symbol={quote.symbol} size={32} />
@@ -275,7 +379,11 @@ export function TradeView({
                     {base.symbol}/{quote.symbol}
                   </strong>
                   <div className="muted">
-                    {pool.venue} · {bpsLabel(pool.feeBps)} fee · flip pair
+                    {launch
+                      ? `Launchpad · ${bpsLabel(launch.feeBps)} fee · ${launchPct.toFixed(1)}% to graduation`
+                      : pool
+                        ? `${pool.venue} · ${bpsLabel(pool.feeBps)} fee · flip pair`
+                        : ""}
                   </div>
                 </span>
               </button>
@@ -297,12 +405,22 @@ export function TradeView({
                   </strong>
                 </div>
                 <div>
-                  <span>24h vol</span>
-                  <strong className="mono">{formatUsdish(stats.volume)}</strong>
+                  <span>{launch ? "Raised" : "24h vol"}</span>
+                  <strong className="mono">
+                    {launch
+                      ? `${formatUsdish(Number(BigInt(launch.realSolRaised)) / 1e9)} SOL`
+                      : formatUsdish(stats.volume)}
+                  </strong>
                 </div>
                 <div>
-                  <span>TVL</span>
-                  <strong className="mono">{tvl > 0 ? `$${formatUsdish(tvl)}` : "—"}</strong>
+                  <span>{launch ? "Target" : "TVL"}</span>
+                  <strong className="mono">
+                    {launch
+                      ? `${formatUsdish(Number(BigInt(launch.graduationSol)) / 1e9)} SOL`
+                      : tvl > 0
+                        ? `$${formatUsdish(tvl)}`
+                        : "—"}
+                  </strong>
                 </div>
               </div>
             </header>
@@ -319,7 +437,9 @@ export function TradeView({
                     {tf}
                   </button>
                 ))}
-                <span className="muted chart-note">Earth AMM series from pool reserves</span>
+                <span className="muted chart-note">
+                  {launch ? "Launchpad curve vs SOL" : "Earth AMM series from pool reserves"}
+                </span>
               </div>
               <CandleChart candles={candles} height={360} />
             </div>
@@ -362,37 +482,57 @@ export function TradeView({
               </div>
               <div className="panel pad">
                 <div className="panel-head tight">
-                  <span>Depth</span>
-                  <span>AMM curve</span>
+                  <span>{launch ? "Curve" : "Depth"}</span>
+                  <span>{launch ? "graduation" : "AMM curve"}</span>
                 </div>
-                <div className="depth">
-                  {[...depth.asks].reverse().map((level, i) => (
-                    <div key={`a${i}`} className="depth-row ask">
-                      <span className="mono down">{formatPrice(level.price)}</span>
-                      <span className="mono">{formatUsdish(level.size)}</span>
-                      <i style={{ width: `${(level.total / maxAsk) * 100}%` }} />
+                {launch ? (
+                  <div className="stack">
+                    <div className="launch-meter tall" aria-label={`${launchPct.toFixed(1)} percent to graduation`}>
+                      <span style={{ width: `${Math.min(100, launchPct)}%` }} />
                     </div>
-                  ))}
-                  <div className="depth-mid mono">{formatPrice(stats.last)} {quote.symbol}</div>
-                  {depth.bids.map((level, i) => (
-                    <div key={`b${i}`} className="depth-row bid">
-                      <span className="mono up">{formatPrice(level.price)}</span>
-                      <span className="mono">{formatUsdish(level.size)}</span>
-                      <i style={{ width: `${(level.total / maxBid) * 100}%` }} />
-                    </div>
-                  ))}
-                </div>
+                    <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                      {launchPct.toFixed(1)}% to graduation. Last buys that fill the target lock remaining tokens and
+                      raised SOL into an Earth pool.
+                    </p>
+                    <button type="button" className="ghost" onClick={onOpenLaunchpad}>
+                      Coin desk on Launchpad
+                    </button>
+                  </div>
+                ) : (
+                  <div className="depth">
+                    {[...depth.asks].reverse().map((level, i) => (
+                      <div key={`a${i}`} className="depth-row ask">
+                        <span className="mono down">{formatPrice(level.price)}</span>
+                        <span className="mono">{formatUsdish(level.size)}</span>
+                        <i style={{ width: `${(level.total / maxAsk) * 100}%` }} />
+                      </div>
+                    ))}
+                    <div className="depth-mid mono">{formatPrice(stats.last)} {quote.symbol}</div>
+                    {depth.bids.map((level, i) => (
+                      <div key={`b${i}`} className="depth-row bid">
+                        <span className="mono up">{formatPrice(level.price)}</span>
+                        <span className="mono">{formatUsdish(level.size)}</span>
+                        <i style={{ width: `${(level.total / maxBid) * 100}%` }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </>
         ) : (
           <div className="panel pad">
             <div className="panel-head">
-              <span>No Earth pool yet</span>
+              <span>No market yet</span>
             </div>
-            <p className="lede">List a token and seed a pool to trade it here. Custom standards including u128 are first-class.</p>
+            <p className="lede">
+              Trade lists Earth pools and launchpad coins on the curve. Launch a coin, or create a pool under Liquidity.
+            </p>
             <div className="row-actions">
-              <button type="button" className="primary" onClick={() => onAddLiquidity({ mintA: WSOL })}>
+              <button type="button" className="primary" onClick={onOpenLaunchpad}>
+                Open Launchpad
+              </button>
+              <button type="button" className="ghost" onClick={() => onAddLiquidity({ mintA: WSOL })}>
                 Create a pool
               </button>
             </div>
@@ -403,7 +543,7 @@ export function TradeView({
       <aside className="panel pad term-ticket">
         <div className="panel-head tight">
           <span>Order</span>
-          <span>market · AMM</span>
+          <span>{launch ? "market · launch" : "market · AMM"}</span>
         </div>
         <div className="side-toggle">
           <button type="button" className={side === "buy" ? "buy on" : "buy"} onClick={() => setSide("buy")}>
@@ -435,40 +575,49 @@ export function TradeView({
         </div>
         <div className="field-label">
           <span>You receive {receive?.symbol ?? ""}</span>
-          <span className="field-meta">{outUsd > 0 ? `~$${formatUsdish(outUsd)}` : selected ? selected.venue : "No route"}</span>
+          <span className="field-meta">
+            {outUsd > 0 ? `~$${formatUsdish(outUsd)}` : launch ? "Launch curve" : selected ? selected.venue : "No route"}
+          </span>
         </div>
         <div className="token-row compact">
           <input readOnly value={outPreview} />
           {receive ? <span className="ticket-asset">{receive.symbol}</span> : null}
         </div>
-        {selected ? (
+        {launch ? (
+          <p className="ticket-meta">
+            Launchpad curve · {bpsLabel(launch.feeBps)} fee
+            {launchQuote?.graduates ? " · this size graduates the coin" : ""}
+          </p>
+        ) : selected ? (
           <p className="ticket-meta">
             {selected.venue} · impact {bpsLabel(selected.priceImpactBps)}
             {selected.note ? ` · ${selected.note}` : ""}
           </p>
         ) : (
-          <p className="ticket-meta">No Earth route for this pair. Seed liquidity first.</p>
+          <p className="ticket-meta">No Earth pool for this pair. Create one under Liquidity, or pick a launchpad coin.</p>
         )}
-        <div className="routes slim">
-          {routes.slice(0, 3).map((route) => (
-            <button
-              key={route.id}
-              type="button"
-              className={`route${route.id === selected?.id ? " best" : ""}`}
-              onClick={() => setPicked(route.id)}
-            >
-              <span>{route.venue}</span>
-              <span className="mono">{receive ? formatAmount(BigInt(route.amountOut), receive.decimals, 4) : ""}</span>
-            </button>
-          ))}
-        </div>
+        {!launch ? (
+          <div className="routes slim">
+            {routes.slice(0, 3).map((route) => (
+              <button
+                key={route.id}
+                type="button"
+                className={`route${route.id === selected?.id ? " best" : ""}`}
+                onClick={() => setPicked(route.id)}
+              >
+                <span>{route.venue}</span>
+                <span className="mono">{receive ? formatAmount(BigInt(route.amountOut), receive.decimals, 4) : ""}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <button
           type="button"
           className={`primary wide ${side === "sell" ? "sell-cta" : "buy-cta"}`}
-          disabled={!selected || busy || amountIn <= 0n || !pool}
-          onClick={execute}
+          disabled={!canFill || busy || amountIn <= 0n || !earth.wallet}
+          onClick={() => void execute()}
         >
-          {busy ? "Filling…" : `${side === "buy" ? "Buy" : "Sell"} ${base?.symbol ?? ""}`}
+          {busy ? "Confirm in wallet…" : !earth.wallet ? "Connect wallet" : `${side === "buy" ? "Buy" : "Sell"} ${base?.symbol ?? ""}`}
         </button>
         {message ? <p className="notice" style={{ marginTop: 12 }}>{message}</p> : null}
       </aside>

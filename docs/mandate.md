@@ -53,8 +53,8 @@ Holder **transfers** still work while `act` is paused. The levy still funds the 
 ## After it is created
 
 - The token is listed on Mandate (`TSxxx5`) in this browser.
-- Earth quotes apply the levy: the number you see on Swap/Trade is what the trader receives.
-- Lock mint / freeze / metadata from **Standards → Lock** if you want Trade to mark it Safe.
+- Earth quotes apply the levy: the number you see on Swap/DEX is what the trader receives.
+- Lock mint / freeze / metadata from **Standards → Lock** if you want DEX to mark it Safe.
 - Create a pool from the token card or Liquidity if you skipped that at create.
 - **Earth Wallet → Standards** already includes Mandate. **List a contract** with the same ticker and decimals so the wallet can show it. The wallet will **send transfers**. It will **not** run the model or submit `act`.
 
@@ -70,7 +70,7 @@ To run the agent later: a process that holds the **operator** key watches the tr
 | --- | --- |
 | Looking for **Launch curve** | That row is removed. TSxxx5 is Mandate. |
 | Using **Launchpad** | Launchpad is a bonding curve for any live standard. It is not the agent factory. You *may* launch a Mandate ticker there; that still uses Mandate’s default variables, including allowlist = connected wallet. |
-| Using **Create a standard** and pasting model code | That publishes a new program (TSxxx6+) and burns $1,000 of $EARTH. Mandate already exists. |
+| Using **Create a standard** and pasting model code | That publishes a new program (TSxxx10+) and burns $1,000 of $EARTH. Mandate already exists. |
 | Pasting a mint or token-account into allowlist | Paste the **wallet pubkey** that will own the receiving token account. |
 | Expecting the website to chat or trade by itself | Earth will not run the operator. Caps and allowlist are the on-chain body. |
 | Setting levy `0` and endowment `0` | Create fails. The treasury needs a funding path. |

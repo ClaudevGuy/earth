@@ -130,7 +130,7 @@ export function LaunchpadView({
           coins={board === "live" ? live : graduated}
           empty={
             board === "live"
-              ? "No coins on the curve yet. Create one — it starts with virtual SOL liquidity and graduates into an Earth pool."
+              ? "No coins on the curve yet. Create one — it mints on-chain with virtual SOL liquidity and graduates into a locked Earth pool."
               : "Nothing has graduated yet. Coins that fill the SOL target move here, with liquidity locked in an Earth CPMM pool."
           }
           onOpen={openCoin}
@@ -246,11 +246,11 @@ function CreateLaunch({
     }
   }
 
-  function launch() {
+  async function launch() {
     onError("");
     setBusy(true);
     try {
-      const { token, standard } = earth.createLaunchCoin({
+      const { token, standard } = await earth.createLaunchCoin({
         standardId,
         symbol,
         name: tokenName,
@@ -260,7 +260,7 @@ function CreateLaunch({
       });
       onDone(
         token.mint,
-        `${token.symbol} is live on ${standard.name} (${standard.id}). Buy against virtual SOL until ${LAUNCH_DEFAULTS.graduationSol} SOL is raised — then liquidity locks into an Earth pool.`,
+        `${token.symbol} is live on ${standard.name} (${standard.id}). Buy against the curve until ${LAUNCH_DEFAULTS.graduationSol} SOL is raised — then liquidity locks into an Earth pool.`,
       );
       setSymbol("");
       setTokenName("");
@@ -285,7 +285,7 @@ function CreateLaunch({
         </div>
         <p className="notice">
           The coin is minted on a standard that already exists on Earth. Paste a Standard ID, or pick one below — SPL,
-          Token-2022, factories, Meridian, or any published custom adapter.
+          Token-2022, factories, or any published custom adapter. Earth mints the coin on-chain into a curve vault.
         </p>
         <label>
           Standard ID
@@ -397,7 +397,7 @@ function CreateLaunch({
             Nobody can pull that LP.
           </span>
         </div>
-        <button type="button" className="primary" onClick={launch} disabled={busy || !standardId}>
+        <button type="button" className="primary" onClick={() => void launch()} disabled={busy || !standardId}>
           Launch coin
         </button>
       </section>
@@ -442,12 +442,12 @@ function CoinDesk({
   const socials = token.socials ?? {};
   const listed = token;
 
-  function trade() {
+  async function trade() {
     onError("");
     onMessage("");
     setBusy(true);
     try {
-      const result = earth.tradeLaunch(coin.mint, side, raw);
+      const result = await earth.tradeLaunch(coin.mint, side, raw);
       if (result.coin.graduated) {
         onMessage(
           `${listed.symbol} graduated. Raised SOL and remaining tokens are locked in an Earth CPMM pool. Trade it like any other pair.`,
@@ -557,7 +557,7 @@ function CoinDesk({
               className="primary"
               onClick={() => onOpenPair("trade", { mintA: token.mint, mintB: WSOL })}
             >
-              Trade {token.symbol} / SOL
+              {token.symbol} / SOL on Trade
             </button>
           </>
         ) : (
@@ -579,11 +579,18 @@ function CoinDesk({
               <input value={raw} onChange={(e) => setRaw(e.target.value)} />
             </label>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-              Preview fills against virtual reserves in this browser, same as Earth AMM. Connect Earth Wallet if you
-              want the bag tied to your address.
+              Fills settle through the launch vault. The same coin is on Trade as {token.symbol}/SOL while it is on the
+              curve.
             </p>
-            <button type="button" className="primary" onClick={trade} disabled={busy}>
+            <button type="button" className="primary" onClick={() => void trade()} disabled={busy}>
               {side === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => onOpenPair("trade", { mintA: token.mint, mintB: WSOL })}
+            >
+              Open {token.symbol} / SOL on Trade
             </button>
           </>
         )}

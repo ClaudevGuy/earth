@@ -5,7 +5,6 @@ import { amountUsd } from "../indexer/value.ts";
 import { findToken } from "../data/tokens.ts";
 import { formatAmount } from "../lib/amounts.ts";
 import { bpsLabel, formatUsdish } from "../lib/format.ts";
-import { resetPools } from "../amm/pools.ts";
 import { TokenAvatar } from "./TokenAvatar.tsx";
 import { SafeBadge } from "./LockAuthorities.tsx";
 import { isTokenSafe } from "../lib/tokenSafety.ts";
@@ -23,16 +22,6 @@ export function PoolsView({
     <section className="panel pad">
       <div className="panel-head">
         <span>Earth AMM pools</span>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            earth.setPools(resetPools());
-            earth.setPositions([]);
-          }}
-        >
-          Reset seed liquidity
-        </button>
       </div>
       <div className="table-wrap">
       <table className="table">

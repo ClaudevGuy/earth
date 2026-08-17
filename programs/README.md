@@ -1,6 +1,6 @@
 # Earth on-chain programs
 
-Netlify cannot deploy Solana programs. The UI ships AMM math plus five **factory** token programs under `programs/`. Until they are deployed, Earth executes against local preview state.
+Netlify cannot deploy Solana programs. The UI ships AMM math plus nine **factory** token programs under `programs/`. Factory create mints as SPL / Token-2022 into Earth Wallet. Earth pools and the launchpad settle through vaults the site coordinates. The on-chain AMM (CPI into adapters) is the next deploy.
 
 ```bash
 cd programs
@@ -36,8 +36,12 @@ Users create contracts on these from **Standards → Create a contract**. Only c
 | `confidential` | `TSxxx3` | u64 | auditor, auto-approve, pending window — proofs on [ZK ElGamal](https://docs.anza.xyz/runtime/zk-elgamal-proof) (`ZkE1Gama1Proof11111111111111111111111111111`) |
 | `vesting` | `TSxxx4` | u128 | cliff, vest duration, start delay, revocable |
 | `agent` | `TSxxx5` | u64 | levy, endowment, epoch cap, per-ACT cap, cooldown, operator, 1–3 destination owners, mandate hash |
+| `kernel` | `TSxxx6` | u64 | kernel slot, syscall fee, hash / recover / identity flags |
+| `proxy` | `TSxxx7` | u64 | implementation pubkey, upgrade delay, freeze |
+| `flash` | `TSxxx8` | u64 | flash premium, max flash of vault, reserve bps |
+| `chamber` | `TSxxx9` | u64 | quorum, proposal threshold, voting period, timelock, treasury levy |
 
-All five keep the Earth Wallet scan layout: contract @0, owner @32, amount @64 (`u64` or `u128`). Extra config sits after that (Mandate keeps extra on the mint, not the token account). Transfer discriminator **1** plus 16-byte little-endian `u128` amount, same as [Adapter spec](../docs/adapter-spec.md). Mandate `act` (discriminator 3) is the operator spend path and is not sent by a normal wallet transfer.
+All nine keep the Earth Wallet scan layout: contract @0, owner @32, amount @64 (`u64` or `u128`). Extra config sits after that (Mandate, Kernel, Proxy, and Flash keep extra on the mint; Chamber also stores delegate + last vote on the token account). Transfer discriminator **1** plus 16-byte little-endian `u128` amount, same as [Adapter spec](../docs/adapter-spec.md). Extra instructions (Mandate `act`, Kernel syscalls, Proxy upgrade, Flash borrow/repay, Chamber vote/execute) are not sent by a normal wallet transfer.
 
 The confidential factory does not move a public amount. It requires proof-context accounts owned by the native ZK ElGamal proof program. That native program is currently disabled on mainnet pending audits; the factory is written to CPI into it once it is re-enabled.
 

@@ -6,6 +6,10 @@ import reflectRs from "../../programs/reflect/src/lib.rs?raw";
 import confidentialRs from "../../programs/confidential/src/lib.rs?raw";
 import vestingRs from "../../programs/vesting/src/lib.rs?raw";
 import agentRs from "../../programs/agent/src/lib.rs?raw";
+import kernelRs from "../../programs/kernel/src/lib.rs?raw";
+import proxyRs from "../../programs/proxy/src/lib.rs?raw";
+import flashRs from "../../programs/flash/src/lib.rs?raw";
+import chamberRs from "../../programs/chamber/src/lib.rs?raw";
 
 export const FACTORY_PROGRAM = {
   memecoin: "EarthMemeFactory11111111111111111111111111",
@@ -13,6 +17,10 @@ export const FACTORY_PROGRAM = {
   confidential: "EarthZkElGamal111111111111111111111111111",
   vesting: "EarthVestLock1111111111111111111111111111",
   agent: "EarthAgentMandate11111111111111111111111",
+  kernel: "EarthKernelPrecomp11111111111111111111111",
+  proxy: "EarthProxyUpgrade11111111111111111111111",
+  flash: "EarthFlashCredit111111111111111111111111",
+  chamber: "EarthChamberGov1111111111111111111111111",
 } as const;
 
 const commonNotes =
@@ -112,7 +120,7 @@ const memeVars: VariableDef[] = [
     default: "",
     required: false,
     placeholder: "Blank = connected Earth Wallet",
-    help: "Receives creator tax. Optional in preview.",
+    help: "Receives creator tax. Optional.",
   },
 ];
 
@@ -348,6 +356,206 @@ const vestingVars: VariableDef[] = [
   },
 ];
 
+const kernelVars: VariableDef[] = [
+  {
+    key: "totalSupply",
+    label: "Total supply",
+    kind: "amount",
+    default: "1000000000",
+    help: "Whole tokens when the contract is created.",
+  },
+  {
+    key: "kernelSlot",
+    label: "Kernel slot",
+    kind: "number",
+    default: 1,
+    min: 1,
+    max: 16,
+    help: "Reserved index, like an Ethereum precompile address (0x01–0x10). Unique per contract on this standard.",
+  },
+  {
+    key: "syscallFee",
+    label: "Syscall fee (base units)",
+    kind: "number",
+    default: 0,
+    min: 0,
+    max: 1_000_000_000,
+    help: "Flat token amount charged per hash / recover / identity syscall and credited to the kernel treasury. 0 = free. Ethereum precompiles charge gas; this is the token equivalent.",
+  },
+  {
+    key: "enableHash",
+    label: "Enable hash syscall",
+    kind: "bool",
+    default: true,
+    help: "SHA-256 analog. Stores the hash of the syscall payload on the contract.",
+  },
+  {
+    key: "enableRecover",
+    label: "Enable recover syscall",
+    kind: "bool",
+    default: true,
+    help: "ecrecover analog. Records a signer pubkey as the recovered identity.",
+  },
+  {
+    key: "enableIdentity",
+    label: "Enable identity syscall",
+    kind: "bool",
+    default: true,
+    help: "Identity precompile analog. Copies up to 32 bytes of payload onto the contract.",
+  },
+];
+
+const proxyVars: VariableDef[] = [
+  {
+    key: "totalSupply",
+    label: "Total supply",
+    kind: "amount",
+    default: "1000000000",
+  },
+  {
+    key: "implementation",
+    label: "Implementation",
+    kind: "address",
+    default: "",
+    required: false,
+    placeholder: "Blank = this proxy program",
+    help: "Logic pubkey this contract points at (EIP-1967 analog). Blank uses the factory itself. Holders keep this contract address when it rotates.",
+  },
+  {
+    key: "upgradeDelayHours",
+    label: "Upgrade delay (hours)",
+    kind: "number",
+    default: 48,
+    min: 1,
+    max: 8760,
+    help: "Time between propose and commit. Anyone can commit after the delay. Cap 8760 (1 year).",
+  },
+  {
+    key: "admin",
+    label: "Proxy admin",
+    kind: "address",
+    default: "",
+    required: false,
+    placeholder: "Blank = connected Earth Wallet",
+    help: "Can propose upgrades and freeze. Freeze is one-way (renounce analog).",
+  },
+  {
+    key: "upgradesFrozen",
+    label: "Freeze upgrades at create",
+    kind: "bool",
+    default: false,
+    help: "If on, the implementation cannot change. Same as freezing after create.",
+  },
+];
+
+const flashVars: VariableDef[] = [
+  {
+    key: "totalSupply",
+    label: "Total supply",
+    kind: "amount",
+    default: "1000000000",
+    help: "Whole tokens at create. The reserve share seeds the flash vault.",
+  },
+  {
+    key: "flashPremiumBps",
+    label: "Flash premium (bps)",
+    kind: "bps",
+    default: 9,
+    min: 0,
+    max: 1000,
+    help: "Paid on repay, Aave-style. 9 = 0.09%. Cap 10%.",
+  },
+  {
+    key: "maxFlashBps",
+    label: "Max flash (bps of vault)",
+    kind: "bps",
+    default: 10000,
+    min: 1,
+    max: 10000,
+    help: "Largest single borrow as a share of the flash vault. 10000 = 100%.",
+  },
+  {
+    key: "reserveBps",
+    label: "Vault reserve (bps of supply)",
+    kind: "bps",
+    default: 2000,
+    min: 0,
+    max: 5000,
+    help: "Share of the first mint that seeds the flash vault. 2000 = 20%. Cap 50%.",
+  },
+  {
+    key: "flashEnabled",
+    label: "Flash loans enabled",
+    kind: "bool",
+    default: true,
+    help: "If off, borrow fails. Transfers still work.",
+  },
+];
+
+const chamberVars: VariableDef[] = [
+  {
+    key: "totalSupply",
+    label: "Total supply",
+    kind: "amount",
+    default: "1000000000",
+    help: "Voting power is this supply. 1 token = 1 vote, or the account’s delegate.",
+  },
+  {
+    key: "quorumBps",
+    label: "Quorum (bps of supply)",
+    kind: "bps",
+    default: 1000,
+    min: 1,
+    max: 10000,
+    help: "For-votes needed to queue. 1000 = 10% of supply.",
+  },
+  {
+    key: "proposalThresholdBps",
+    label: "Proposal threshold (bps of supply)",
+    kind: "bps",
+    default: 100,
+    min: 0,
+    max: 5000,
+    help: "Minimum holding to propose. 100 = 1%. 0 = any holder.",
+  },
+  {
+    key: "votingPeriodHours",
+    label: "Voting period (hours)",
+    kind: "number",
+    default: 72,
+    min: 1,
+    max: 8760,
+    help: "How long a proposal stays open. 72 = 3 days.",
+  },
+  {
+    key: "timelockHours",
+    label: "Timelock (hours)",
+    kind: "number",
+    default: 24,
+    min: 0,
+    max: 8760,
+    help: "Delay after a successful vote before execute. 24 = 1 day. 0 = execute as soon as queued.",
+  },
+  {
+    key: "treasuryBps",
+    label: "Treasury levy (bps)",
+    kind: "bps",
+    default: 0,
+    min: 0,
+    max: 1000,
+    help: "Optional cut of every transfer into the DAO treasury. 0 = off. Cap 10%.",
+  },
+  {
+    key: "guardian",
+    label: "Guardian",
+    kind: "address",
+    default: "",
+    required: false,
+    placeholder: "Blank = connected Earth Wallet",
+    help: "Admin / guardian pubkey. Holds mint authority. Does not bypass quorum.",
+  },
+];
+
 export function overlayKnownFactory(standard: TokenStandard): TokenStandard {
   const factory = findFactory(standard.id);
   if (!factory) return standard;
@@ -436,6 +644,62 @@ export const FACTORIES: FactorySpec[] = [
     blurb: "Team and investor allocations with a cliff, linear vest, and optional revocable grants.",
     defaultDecimals: 9,
     variables: vestingVars,
+  },
+  {
+    standard: std(
+      FACTORY_STANDARD_IDS.kernel,
+      "Kernel",
+      FACTORY_PROGRAM.kernel,
+      "u64",
+      "kernel",
+      `${commonNotes} Precompile-style system contract. Reserved kernel slot plus hash, recover, and identity syscalls. Optional flat syscall fee.`,
+      { filename: "lib.rs", code: kernelRs },
+    ),
+    blurb: "Ethereum precompile analog. Privileged hash, recover, and identity syscalls at a reserved slot — plus a normal token.",
+    defaultDecimals: 6,
+    variables: kernelVars,
+  },
+  {
+    standard: std(
+      FACTORY_STANDARD_IDS.proxy,
+      "Proxy",
+      FACTORY_PROGRAM.proxy,
+      "u64",
+      "proxy",
+      `${commonNotes} Upgradeable shell. Holders keep this contract address. Admin proposes a new implementation; commit after a delay. Freeze is one-way.`,
+      { filename: "lib.rs", code: proxyRs },
+    ),
+    blurb: "Upgradeable token (EIP-1967 analog). Same address, rotating implementation, optional freeze.",
+    defaultDecimals: 6,
+    variables: proxyVars,
+  },
+  {
+    standard: std(
+      FACTORY_STANDARD_IDS.flash,
+      "Flash",
+      FACTORY_PROGRAM.flash,
+      "u64",
+      "flash",
+      `${commonNotes} Atomic uncollateralized credit. Borrow from the vault only if repay plus premium is in the same transaction.`,
+      { filename: "lib.rs", code: flashRs },
+    ),
+    blurb: "Flash-loan token. Uncollateralized vault credit that must be repaid in the same transaction, plus a premium.",
+    defaultDecimals: 6,
+    variables: flashVars,
+  },
+  {
+    standard: std(
+      FACTORY_STANDARD_IDS.chamber,
+      "Chamber",
+      FACTORY_PROGRAM.chamber,
+      "u64",
+      "chamber",
+      `${commonNotes} DAO governance: propose, vote, queue, execute. Quorum, voting period, timelock. Optional transfer levy into the treasury.`,
+      { filename: "lib.rs", code: chamberRs },
+    ),
+    blurb: "DAO token. Holders propose and vote; a timelock sits in front of execute. No middleman.",
+    defaultDecimals: 6,
+    variables: chamberVars,
   },
 ];
 

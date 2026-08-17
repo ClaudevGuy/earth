@@ -77,13 +77,13 @@ export function LockAuthorities({
   const safe = isTokenSafe(token);
   const left = remainingLocks(token);
 
-  function run(kinds: Array<keyof TokenLock>) {
+  async function run(kinds: Array<keyof TokenLock>) {
     onError?.("");
     try {
-      const next = earth.lockToken(token.mint, kinds);
+      const next = await earth.lockToken(token.mint, kinds);
       onDone?.(
         isTokenSafe(next)
-          ? `${next.symbol} is Safe — supply locked, freeze revoked, metadata immutable. Trade shows the badge.`
+          ? `${next.symbol} is Safe — supply locked, freeze revoked, metadata immutable. DEX shows the badge.`
           : `${next.symbol} lock updated. Finish the remaining steps to mark it Safe.`,
       );
     } catch (err) {
@@ -102,7 +102,7 @@ export function LockAuthorities({
       </div>
       <p className="notice" style={{ marginTop: compact ? 0 : undefined }}>
         Lock supply, revoke freeze, and freeze metadata so this token cannot be changed. These steps cannot be undone.
-        {safe ? " All three are done — Trade marks this ticker Safe." : ""}
+        {safe ? " All three are done — DEX marks this ticker Safe." : ""}
       </p>
       <div className="lock-steps">
         {STEPS.map((step) => {
@@ -116,7 +116,7 @@ export function LockAuthorities({
               {done ? (
                 <span className="pill safe">Done</span>
               ) : (
-                <button type="button" className="ghost" onClick={() => run([step.key])}>
+                <button type="button" className="ghost" onClick={() => void run([step.key])}>
                   {step.action}
                 </button>
               )}
@@ -126,7 +126,7 @@ export function LockAuthorities({
       </div>
       {left.length ? (
         <div className="row-actions" style={{ marginTop: 12 }}>
-          <button type="button" className="primary" onClick={() => run(left)}>
+          <button type="button" className="primary" onClick={() => void run(left)}>
             Make {token.symbol} Safe
           </button>
         </div>

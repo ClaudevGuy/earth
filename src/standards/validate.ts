@@ -86,6 +86,21 @@ export function parseMintConfig(factory: FactorySpec, values: Record<string, str
     }
     config.mandate = mandate;
   }
+  if (kind === "kernel") {
+    if (!config.enableHash && !config.enableRecover && !config.enableIdentity) {
+      throw new Error("Enable at least one syscall (hash, recover, or identity).");
+    }
+  }
+  if (kind === "flash") {
+    if (Number(config.flashPremiumBps) === 0 && Number(config.reserveBps) === 0) {
+      throw new Error("Set a flash premium or a vault reserve so flash credit can exist.");
+    }
+  }
+  if (kind === "chamber") {
+    if (Number(config.votingPeriodHours) < 1) {
+      throw new Error("Voting period must be at least 1 hour.");
+    }
+  }
   return config;
 }
 
@@ -122,6 +137,23 @@ export function configSummary(config?: TokenMintConfig): string[] {
     );
     const dests = [config.allowDest1, config.allowDest2, config.allowDest3].filter((value) => String(value ?? "").trim());
     lines.push(`${dests.length} allowed ACT destination${dests.length === 1 ? "" : "s"}`);
+  } else if (factory === "kernel") {
+    const sys: string[] = [];
+    if (config.enableHash) sys.push("hash");
+    if (config.enableRecover) sys.push("recover");
+    if (config.enableIdentity) sys.push("identity");
+    lines.push(`slot ${config.kernelSlot} · ${sys.join(" / ") || "no syscalls"}`);
+    if (Number(config.syscallFee) > 0) lines.push(`syscall fee ${config.syscallFee} base units`);
+  } else if (factory === "proxy") {
+    lines.push(`${config.upgradeDelayHours}h upgrade delay`);
+    if (config.upgradesFrozen) lines.push("upgrades frozen");
+    else lines.push(config.implementation ? "custom implementation" : "self implementation");
+  } else if (factory === "flash") {
+    lines.push(`premium ${Number(config.flashPremiumBps) / 100}% · vault ${Number(config.reserveBps) / 100}%`);
+    if (!config.flashEnabled) lines.push("flash paused");
+  } else if (factory === "chamber") {
+    lines.push(`quorum ${Number(config.quorumBps) / 100}% · vote ${config.votingPeriodHours}h · lock ${config.timelockHours}h`);
+    if (Number(config.treasuryBps) > 0) lines.push(`treasury levy ${Number(config.treasuryBps) / 100}%`);
   }
   return lines;
 }

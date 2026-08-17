@@ -418,10 +418,19 @@ a.ghost {
   padding: 22px;
 }
 
+.dex-layout {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
 .swap-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
   gap: 18px;
+}
+
+.dex-layout .swap-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
 }
 
 .field-label {
@@ -1091,6 +1100,12 @@ a.ghost {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+}
+
+@media (min-width: 900px) {
+  .factory-grid:not(.launch-std-list) {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .factory-card {

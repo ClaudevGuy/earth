@@ -724,7 +724,8 @@ export function App() {
           </div>
           <p className="lede">
             Create a new standard on the Earth site — upload public source, burn $1,000 of $EARTH, Earth deploys. Seeded
-            factories here include Memecoin, Reflect, Confidential, Vest, and Mandate (AI-agent native). Paste a standard
+            factories here include Memecoin, Reflect, Confidential, Vest, Mandate (AI-agent), Kernel, Proxy, Flash, and
+            Chamber (DAO). Paste a standard
             ID or share code so this wallet can hold its tokens. Source is shown on each card when the catalog has it.
           </p>
           <label>
@@ -732,7 +733,7 @@ export function App() {
             <input
               value={standardId}
               onChange={(e) => setStandardId(e.target.value)}
-              placeholder="TSxxx6"
+              placeholder="TSxxx10"
               autoCorrect="off"
               spellCheck={false}
             />

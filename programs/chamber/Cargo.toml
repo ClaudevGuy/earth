@@ -1,0 +1,12 @@
+[package]
+name = "earth-chamber"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Earth Chamber factory: DAO token with proposals, votes, quorum, and a timelock."
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "2.1"

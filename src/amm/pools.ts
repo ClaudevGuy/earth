@@ -1,71 +1,28 @@
 import type { Pool } from "../types";
 import { loadJson, saveJson } from "../lib/storage";
-import { WSOL } from "../lib/constants";
-import { USDC, USDT, BONK, MERIDIAN } from "../data/tokens";
 
-const SOL = WSOL;
-
-function seedPools(): Pool[] {
-  return [
-    {
-      id: "earth-sol-usdc",
-      tokenA: SOL,
-      tokenB: USDC,
-      reserveA: "2500000000000",
-      reserveB: "425000000000",
-      lpSupply: "103077640638",
-      feeBps: 30,
-      curve: "constant-product",
-      venue: "earth-cpmm",
-    },
-    {
-      id: "earth-usdc-usdt",
-      tokenA: USDC,
-      tokenB: USDT,
-      reserveA: "8000000000000",
-      reserveB: "8012000000000",
-      lpSupply: "8005999000000",
-      feeBps: 4,
-      curve: "stable",
-      venue: "earth-stable",
-    },
-    {
-      id: "earth-bonk-sol",
-      tokenA: BONK,
-      tokenB: SOL,
-      reserveA: "85000000000000000",
-      reserveB: "420000000000",
-      lpSupply: "18894390702000",
-      feeBps: 30,
-      curve: "constant-product",
-      venue: "earth-cpmm",
-    },
-    {
-      id: "earth-mrd-sol",
-      tokenA: MERIDIAN,
-      tokenB: SOL,
-      reserveA: "1000000000000000000000000",
-      reserveB: "1500000000000",
-      lpSupply: "1224744871391589",
-      feeBps: 30,
-      curve: "constant-product",
-      venue: "earth-cpmm",
-    },
-  ];
-}
+const DEMO_POOL_IDS = new Set(["earth-sol-usdc", "earth-usdc-usdt", "earth-bonk-sol", "earth-mrd-sol"]);
 
 export function loadPools(): Pool[] {
-  return loadJson<Pool[]>("pools", seedPools());
+  return loadJson<Pool[]>("pools", []).filter((p) => !DEMO_POOL_IDS.has(p.id));
 }
 
 export function savePools(pools: Pool[]): void {
-  saveJson("pools", pools);
+  saveJson(
+    "pools",
+    pools.filter((p) => !DEMO_POOL_IDS.has(p.id)),
+  );
 }
 
-export function resetPools(): Pool[] {
-  const next = seedPools();
-  savePools(next);
-  return next;
+export function mergeMarketPools(local: Pool[], remote: Pool[]): Pool[] {
+  const seen = new Set<string>();
+  const out: Pool[] = [];
+  for (const row of [...remote, ...local]) {
+    if (!row?.id || DEMO_POOL_IDS.has(row.id) || seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
 }
 
 export function poolPairKey(a: string, b: string): string {

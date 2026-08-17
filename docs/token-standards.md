@@ -14,8 +14,8 @@ A standard record has:
 
 | Field | Meaning |
 | --- | --- |
-| **Standard ID** | Assigned by Earth as `TSxxx1`, `TSxxx2`, `TSxxx3`, … Factories are `TSxxx1`–`TSxxx5`. Each new standard gets the next number. |
-| **Name** | Human label, e.g. `Meridian` or `Acme Credits` |
+| **Standard ID** | Assigned by Earth as `TSxxx1`, `TSxxx2`, `TSxxx3`, … Factories are `TSxxx1`–`TSxxx9`. Each new standard gets the next number. |
+| **Name** | Human label, e.g. `Aurora` or `Acme Credits` |
 | **Program** | Earth deploys this from the source you uploaded. You burn $1,000 of $EARTH; you do not paste an address. |
 | **Source** | Required. The token contract code. Public on the standard card and in the catalog. |
 | **Kind** | Always `custom` for standards Earth deploys. SPL Token and Token-2022 are the native rows. |
@@ -30,7 +30,7 @@ Open **Standards → Browse standards**.
 
 - Search by name, standard ID, or notes.
 - Filter **All / Factories / Custom / Native / Yours**.
-- **Public** pills are in the catalog (or seeded, like Meridian). **Yours** are standards you created in this browser.
+- **Public** pills are in the catalog (or factories Earth ships). **Yours** are standards you created in this browser.
 - **catalog live** means other users on this deployment can see what you publish. **catalog local** means publish is only on this machine — use **Copy link** so someone else can still adopt it.
 
 Paste a share code (or open a shared `?adopt=` link) to add a standard that is not in the catalog yet.
@@ -41,13 +41,13 @@ Open **Standards → Create a standard**.
 
 You are **not** deploying a Solana program yourself. You upload the source; Earth deploys it.
 
-1. **Standard name** — required. Example: `Meridian`.
+1. **Standard name** — required. Example: `Aurora`.
 2. **Amount size**
    - **Large (u128)** for 18-decimal (or larger) supplies. u64 with more than 12 decimals cannot hold a large supply.
    - **Normal (u64)** if you want SPL-sized amounts.
 3. **Token contract source** — required. Upload a `.rs` (or `.toml` / `.txt`) file, or paste the program source. This is public: anyone who opens the standard can read it. Binaries and `.so` files are rejected.
 4. Optional **notes** — shown to people who find the standard.
-5. You burn **$1,000 of $EARTH** (quoted from the live $EARTH price). Earth deploys that source and holds upgrade authority. $EARTH is not live yet, so nothing is taken in this protocol preview. Creating a contract on a factory or on someone else’s standard does not require this burn.
+5. You burn **$1,000 of $EARTH** (quoted from the live $EARTH price). Earth deploys that source and holds upgrade authority. Until `$EARTH` is listed (`VITE_EARTH_MINT`), publishing a new standard is free. Creating a contract on a factory or on someone else’s standard does not require this burn.
 6. Leave **Publish so other users can find this standard** checked (default). Uncheck only if you want it private to this browser — source is still visible on your local card.
 7. Optionally check **Also create my first contract now** if you want a ticker in the same click. You can skip this: the point of a standard is that **other people create their own contracts on it later**.
 8. Click **Create standard**.
@@ -71,15 +71,9 @@ You upload **source text**, not a ZIP or `.so`. You do not paste a program ID. C
 
 Factory standards already ship their `lib.rs` on the card. Custom standards you create must include source or they will not create.
 
-### Preview (this protocol preview)
+Until `$EARTH` is listed, publishing a new standard is free. Once `VITE_EARTH_MINT` is set, the same click burns $1,000 of $EARTH from the connected Earth Wallet. Earth deploys the program and publishes the standard. Others who find it create **real contract addresses** on that program.
 
-Earth assigns a local program handle (`earthprog:…`). Trade and LP locally. Other users can still adopt the preview via the catalog or a share link. Balances on chain stay at zero until Earth deploys for real.
-
-### Live (when on-chain deploy is wired)
-
-The same click burns $1,000 of $EARTH from the connected Earth Wallet. Earth deploys the program and publishes the standard. Others who find it create **real contract addresses** on that program.
-
-If Earth has not deployed yet, Earth Wallet will show a warning and keep custom balances at zero.
+Factory contracts mint on-chain into Earth Wallet (SPL or Token-2022). If a custom program ID is not a live Solana address, Earth Wallet will show a warning and keep those balances at zero. Placeholder handles (`earthprog:…`) are not sent to RPC.
 
 ## Register the same standard in Earth Wallet
 
@@ -96,15 +90,14 @@ Wallet registration is what lets send/receive and balance scans work. Market reg
 
 - **SPL Token** — `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`, u64, review `native`. Anyone can list an SPL contract on it.
 - **Token-2022** — `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`, u64, review `native`. Extra extensions (transfer fee, metadata, hooks) are first-class in Earth Wallet.
-- **Meridian (u128)** — preview adapter, review `registered`, public in the catalog. Example of 18-decimal amounts that do not fit SPL. Anyone can create a contract on it.
-- **Five factories** (review `registered`) — Mandate (`TSxxx5`, AI-agent native; create from **Standards → Create a contract → Mandate**), Memecoin (`TSxxx1`), Reflect/burn (`TSxxx2`), Confidential ZK ElGamal (`TSxxx3`), Vested lock (`TSxxx4`). You only fill variables. There is no Launch curve factory. Details: [Factory standards](factory-standards.md), [Mandate](mandate.md). Fair launches: [Launchpad](launchpad.md).
+- **Nine factories** (review `registered`) — Memecoin (`TSxxx1`), Reflect/burn (`TSxxx2`), Confidential ZK ElGamal (`TSxxx3`), Vested lock (`TSxxx4`), Mandate (`TSxxx5`, AI-agent native), Kernel (`TSxxx6`, precompiles), Proxy (`TSxxx7`, upgradeable), Flash (`TSxxx8`, flash loans), Chamber (`TSxxx9`, DAO). You only fill variables. There is no Launch curve factory. Details: [Factory standards](factory-standards.md), [Mandate](mandate.md). Fair launches: [Launchpad](launchpad.md).
 
 ## After a standard is public
 
 - Anyone can **Create a contract** on it from Browse.
 - Create a pool from the token card, or from **Liquidity**.
 - Swap if a pool exists.
-- Other wallets and Jupiter will **not** see a custom `u128` adapter until they add one. Earth can still quote and LP it.
+- Other wallets will **not** see a custom `u128` adapter until they add one. Earth can still quote and LP it.
 
 ## Removing a standard
 
@@ -115,4 +108,4 @@ Wallet registration is what lets send/receive and balance scans work. Market reg
 - every pool that used those contracts
 - your LP shares on those pools
 
-It does **not** unpublish a catalog entry. Other users keep the public standard. Native SPL / Token-2022 and the seeded Meridian row cannot be removed from this UI.
+It does **not** unpublish a catalog entry. Other users keep the public standard. Native SPL / Token-2022 and the nine factory rows cannot be removed from this UI.

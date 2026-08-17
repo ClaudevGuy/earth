@@ -1,6 +1,6 @@
 # Launchpad
 
-Launchpad is how you create a public coin on Earth. It is not a token standard. The coin is minted on a **standard that is already live** — SPL Token, Token-2022, an Earth factory, Meridian, or any published custom adapter.
+Launchpad is how you create a public coin on Earth. It is not a token standard. The coin is minted on a **standard that is already live** — SPL Token, Token-2022, an Earth factory, or any published custom adapter.
 
 ## What you do
 
@@ -26,14 +26,16 @@ Price comes from the virtual reserves (`virtual SOL / tokens still on the curve`
 
 ## After graduation
 
-The coin appears under **Graduated**. Trade it on **Trade** as `{TICKER}/SOL`. Liquidity sits in the Earth pool; it is not an LP position you can pull.
+The coin appears under **Graduated**. Open it on **Trade** as `{TICKER}/SOL`. While it is on the curve it already appears on Trade. Liquidity sits in the Earth pool; it is not an LP position you can pull.
 
 ## Factories vs Launchpad
 
 If you pick Mandate, Launchpad uses Mandate’s default variables and sets the operator and allowed ACT destination to the connected Earth Wallet. That is still a Mandate contract (TSxxx5), not a different standard. To set a custom allowlist or caps, create the contract from **Standards → Create a contract → Mandate** instead.
 
+If you pick Memecoin, Reflect/burn, or Chamber, Launchpad applies that factory’s default taxes or treasury levy. Kernel, Proxy, and Flash also launch with their defaults (syscalls on, upgrade delay, flash premium). To change those, create the contract from **Standards**.
+
 Fair launch with virtual liquidity is Launchpad. It is not a factory. There is no Launch curve token standard.
 
-## Preview
+## Live settlement
 
-Curve fills and graduation update this browser, same as Earth AMM, until the matching on-chain program is deployed. Do not send real assets expecting an on-chain curve yet.
+Buys and sells settle on-chain through the coin’s vault. Graduation locks remaining tokens and raised SOL into an Earth CPMM pool. Connect Earth Wallet before you launch or trade the curve.

@@ -390,6 +390,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "earth-chamber"
+version = "0.1.0"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
 name = "earth-confidential"
 version = "0.1.0"
 dependencies = [
@@ -397,7 +404,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "earth-flash"
+version = "0.1.0"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
+name = "earth-kernel"
+version = "0.1.0"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
 name = "earth-memecoin"
+version = "0.1.0"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
+name = "earth-proxy"
 version = "0.1.0"
 dependencies = [
  "solana-program",

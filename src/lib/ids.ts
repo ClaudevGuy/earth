@@ -17,6 +17,13 @@ export function isOnChainProgramId(programId: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(programId);
 }
 
+export function isOnChainMint(mint: string): boolean {
+  if (!isOnChainProgramId(mint)) return false;
+  if (mint.startsWith("earthmint:") || mint.startsWith("earthprog:")) return false;
+  if (mint.startsWith("MRD111") || mint.includes("Preview")) return false;
+  return true;
+}
+
 /** True for official SPL / Token-2022 and any live address Earth has already deployed. */
 export function isLiveEarthProgram(programId: string): boolean {
   if (!isOnChainProgramId(programId)) return false;

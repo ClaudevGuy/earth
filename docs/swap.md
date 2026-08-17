@@ -1,29 +1,19 @@
-# Swapping and Trade
+# DEX and Trade
 
-**Trade** is the terminal: chart, depth, recent fills, and a buy/sell ticket against one Earth pool. **Swap** is the route board: every Earth path plus optional Jupiter, then execute the best Earth route.
+**DEX** is the swap: pick two tokens, compare Earth routes, confirm in Earth Wallet. **Trade** is the terminal: chart, depth, recent fills, and a buy/sell ticket. Launchpad coins on the curve show up on Trade as `{TICKER}/SOL`.
 
-Both fill against **local pool reserves** until the on-chain program is live.
+Earth is the venue. Aggregation across other DEXes comes later.
 
-## Trade terminal
+## DEX (swap)
 
-1. Connect Earth Wallet if you want on-chain balances. Preview fills work without it.
-2. Pick a market from the list (search by ticker). Pools you create on Standards or Liquidity show up here, including custom `u128` pairs such as MRD/SOL.
-3. Choose a timeframe. Candles are built from the pool’s reserve path in this browser (not a centralized exchange feed).
-4. **Buy** pays the quote asset and receives the base. **Sell** is the reverse.
-5. Enter size (or 25/50/75/100% of a connected balance). The ticket quotes Earth routes and shows impact.
-6. Confirm. The fill updates reserves, the chart, depth, and the tape.
+1. Connect Earth Wallet. You need it to fill.
+2. Choose pay token, receive token, and amount.
+3. Pick a route on the right (best output is selected by default).
+4. Confirm in Earth Wallet.
 
-If there is no Earth pool yet, the terminal asks you to create one under Liquidity. Custom standards including `u128` are first-class here — they just need an Earth pool.
+If there is no pool (and no two-hop), you will see that there is no Earth route. Create a pool under Liquidity, or launch a coin.
 
-**Add liquidity** on a pair jumps to the Liquidity tab with that market focused.
-
-## Swap (route comparison)
-
-1. Choose pay token, receive token, and amount.
-2. Pick a route on the right (best output is selected by default).
-3. **Swap on best Earth route**.
-
-If there is no pool (and no two-hop), you will see “No pool yet for this pair. Create one under Liquidity.”
+**Open on Trade** jumps to the terminal for that pair.
 
 ## Routes Earth can quote
 
@@ -31,23 +21,34 @@ If there is no pool (and no two-hop), you will see “No pool yet for this pair.
 | --- | --- |
 | **Earth CPMM** | Direct constant-product pool for the pair |
 | **Earth Stable** | Direct stable pool for the pair |
-| **Earth hop** | Two Earth pools sharing a middle mint (for example MRD → SOL → USDC) |
-| **Jupiter** | Both tokens are non-custom (`spl-token` or `token-2022`), amount > 0, `/api/jupiter-quote` succeeds |
+| **Earth hop** | Two Earth pools sharing a middle mint (for example your token → SOL → USDC) |
 
-Custom adapters never go to Jupiter. That is why Meridian and any `u128` standard you register still need an Earth pool.
+## Trade terminal
+
+1. Connect Earth Wallet.
+2. Pick a market from the list. Pools and launchpad coins both show here.
+3. Choose a timeframe. Candles record live fills (no seeded history).
+4. **Buy** pays the quote asset and receives the base. **Sell** is the reverse.
+5. Enter size (or 25/50/75/100% of a connected balance).
+6. Confirm in Earth Wallet.
+
+Launchpad rows fill the bonding curve until graduation. Then the pair becomes an Earth pool on the same terminal.
+
+**Add liquidity** on a pair jumps to the Liquidity tab with that market focused.
+
+## After you trade
+
+Earth pool fills move tokens through the pool vault and update the shared book. Launchpad fills move SOL and tokens through the coin’s vault.
 
 Two-hop quotes take a fee on **each** hop. Direct is usually better if a direct pool exists.
 
 ## Fees and impact
 
 - Pool fee is baked into the quote (`feeBps`). 30 bps = 0.30% of input on that hop.
+- Launch fee is 1% on the curve.
 - **Impact** is extra slippage versus spot, in bps. Large size vs thin reserves → high impact.
 - Stable pools stay closer to 1:1 until size is large, then they stretch and cap.
 
 ## Wallet balances
 
-Connected Earth Wallet: the pay field can show **Bal** for SPL mints the RPC can see. Preview mints and custom adapters without on-chain accounts will not show a chain balance.
-
-## After you trade (preview)
-
-Reserves in this browser update. Your LP shares on that pool (if any) now claim a different mix of tokens. The Trade chart and tape record that fill locally. That is the same economic effect as a live AMM.
+Connected Earth Wallet: the pay field can show **Bal** for SPL mints the RPC can see. Launchpad holdings show on the curve ticket.

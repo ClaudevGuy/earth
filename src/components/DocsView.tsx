@@ -3,16 +3,17 @@ import type { Page } from "../types";
 import { DOCS, type DocsBlock } from "../docs/guide.ts";
 
 export function DocsView({ onOpen, chapter }: { onOpen: (page: Page) => void; chapter?: string }) {
-  const [active, setActive] = useState(chapter ?? DOCS[0]!.id);
+  const resolved = chapter === "swap" ? "dex" : chapter;
+  const [active, setActive] = useState(resolved ?? DOCS[0]!.id);
 
   useEffect(() => {
-    if (!chapter) return;
-    setActive(chapter);
+    if (!resolved) return;
+    setActive(resolved);
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById(`docs-${chapter}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(`docs-${resolved}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [chapter]);
+  }, [resolved]);
 
   function jump(id: string) {
     setActive(id);

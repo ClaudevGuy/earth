@@ -18,7 +18,7 @@ import {
   type OpenVault,
   type VaultBlob,
 } from "../shared/crypto";
-import { base64ToBytes, bytesToBase64, shortAddress } from "../shared/format";
+import { base64ToBytes, bytesToBase64, parseAmount, shortAddress } from "../shared/format";
 import {
   assertHttpsOrigin,
   assertRpcUrl,
@@ -39,6 +39,13 @@ import type {
   WalletAccountInfo,
 } from "../shared/types";
 import { resolveStandardById } from "./catalog";
+import {
+  sendFunds,
+  signAndSendEncoded,
+  signEncodedTransaction,
+  simulateEncoded,
+  summarizeTransaction,
+} from "./chain";
 import { fetchHoldings } from "./holdings";
 
 type StoredConfig = {
@@ -362,8 +369,36 @@ async function handlePopup(msg: PopupRequest): Promise<PopupResponse> {
       case "REFRESH":
         await refreshBalances();
         return ok(await publicState());
-      case "SEND":
-        throw new Error("Send will be available after this wallet finishes opening. Import and balances work.");
+      case "SEND": {
+        const session = await loadSession();
+        const config = await loadConfig();
+        const to = msg.to.trim();
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to)) {
+          throw new Error("That address is not a valid Solana public key.");
+        }
+        const listed = config.tokens.find((t) => t.mint === msg.mint);
+        const held = cachedBalances.find((b) => b.mint === msg.mint);
+        const decimals = listed?.decimals ?? held?.decimals ?? (msg.nativeSol ? 9 : 0);
+        const amount = parseAmount(msg.amount, decimals);
+        const standard = findStandard(msg.standardId, config.standards);
+        if (!standard) throw new Error("Unknown token standard.");
+        const signature = await sendFunds({
+          rpcUrl: config.rpcUrl,
+          keypair: requireKeypair(session),
+          to,
+          mint: msg.mint,
+          amount,
+          standard,
+          nativeSol: Boolean(msg.nativeSol),
+        });
+        config.activity = [
+          { signature, summary: `Sent ${msg.amount} ${listed?.symbol ?? held?.symbol ?? "token"}`, at: Date.now() },
+          ...(config.activity ?? []),
+        ].slice(0, 20);
+        await saveConfig(config);
+        await refreshBalances().catch(() => undefined);
+        return ok({ signature });
+      }
       case "IMPORT_STANDARD": {
         const config = await loadConfig();
         const standard = await resolveStandardById(msg.id, {
@@ -570,10 +605,49 @@ async function handlePage(msg: PageRequest): Promise<unknown> {
         publicKey: keypair.publicKey.toBase58(),
       };
     }
-    case "signTransaction":
-    case "signAllTransactions":
-    case "signAndSendTransaction":
-      throw new Error("Reconnect Earth Wallet to sign this request.");
+    case "signTransaction": {
+      if (!trusted(config, origin)) throw new Error("Site is not connected.");
+      const encoded = String(msg.params?.transaction ?? "");
+      if (!encoded) throw new Error("Missing transaction.");
+      const keypair = requireKeypair(session);
+      const simulation = await simulateEncoded(config.rpcUrl, encoded);
+      await requestApproval({
+        origin,
+        kind: "signTransaction",
+        preview: summarizeTransaction(encoded),
+        simulation,
+      });
+      return signEncodedTransaction(keypair, encoded);
+    }
+    case "signAllTransactions": {
+      if (!trusted(config, origin)) throw new Error("Site is not connected.");
+      const encoded = (msg.params?.transactions ?? []) as string[];
+      if (!encoded.length) throw new Error("Missing transactions.");
+      const keypair = requireKeypair(session);
+      await requestApproval({
+        origin,
+        kind: "signAllTransactions",
+        txCount: encoded.length,
+        preview: `Sign ${encoded.length} transaction${encoded.length === 1 ? "" : "s"}.`,
+      });
+      const signed: string[] = [];
+      for (const row of encoded) signed.push(await signEncodedTransaction(keypair, row));
+      return signed;
+    }
+    case "signAndSendTransaction": {
+      if (!trusted(config, origin)) throw new Error("Site is not connected.");
+      const encoded = String(msg.params?.transaction ?? "");
+      if (!encoded) throw new Error("Missing transaction.");
+      const keypair = requireKeypair(session);
+      const simulation = await simulateEncoded(config.rpcUrl, encoded);
+      await requestApproval({
+        origin,
+        kind: "signAndSendTransaction",
+        preview: summarizeTransaction(encoded),
+        simulation,
+      });
+      return signAndSendEncoded(config.rpcUrl, keypair, encoded);
+    }
     default:
       throw new Error("Unknown page method.");
   }

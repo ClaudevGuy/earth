@@ -27,7 +27,7 @@ Non-custodial Solana wallet. Keys stay on your device. SPL, Token-2022, and ever
 
 Earth Wallet is a non-custodial Solana wallet. Your secret recovery phrase is created and encrypted on this device. Earth never holds your keys, never has a copy of your seed, and cannot recover a lost password.
 
-Most Solana wallets only show SPL Token and Token-2022. Earth Wallet is built for every token standard on Earth: native SOL, SPL, Token-2022 (including extensions such as transfer fees, metadata, and non-transferable tokens), and any custom program Earth deploys — including 128-bit (u128) amounts and Mandate, the AI-agent native factory (identity, treasury, and spend cap on-chain).
+Most Solana wallets only show SPL Token and Token-2022. Earth Wallet is built for every token standard on Earth: native SOL, SPL, Token-2022 (including extensions such as transfer fees, metadata, and non-transferable tokens), and any custom program Earth deploys — including 128-bit (u128) amounts and Earth factories such as Mandate (AI-agent native), Kernel, Proxy, Flash, and Chamber.
 
 WHAT YOU CAN DO
 

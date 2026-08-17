@@ -16,33 +16,6 @@ function persist(next: SeriesFile): void {
   saveJson("series", next);
 }
 
-function hashStr(value: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < value.length; i++) h = Math.imul(h ^ value.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
-
-function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function volatility(pool: Pool, base: ListedToken, quote: ListedToken): number {
-  if (pool.curve === "stable") return 0.00055;
-  const tags = [...(base.tags ?? []), ...(quote.tags ?? [])];
-  if (tags.includes("custom") || tags.includes("u128")) return 0.042;
-  if (base.symbol === "BONK" || base.symbol === "WIF" || quote.symbol === "BONK" || quote.symbol === "WIF") {
-    return 0.032;
-  }
-  return 0.016;
-}
-
 function seriesKey(poolId: string, timeframe: Timeframe): string {
   return `${poolId}:${timeframe}`;
 }
@@ -51,54 +24,19 @@ function align(ts: number, interval: number): number {
   return Math.floor(ts / interval) * interval;
 }
 
-function generate(pool: Pool, base: ListedToken, quote: ListedToken, timeframe: Timeframe, last: number): Candle[] {
+function generate(timeframe: Timeframe, last: number): Candle[] {
   const interval = INTERVAL_SEC[timeframe];
-  const count = CANDLE_COUNT[timeframe];
   const end = align(Math.floor(Date.now() / 1000), interval);
-  const rand = mulberry32(hashStr(`${pool.id}:${timeframe}:${base.mint}`));
-  const vol = volatility(pool, base, quote);
-  const stepVol = vol * Math.sqrt(interval / 3600);
-  const logLast = Math.log(Math.max(last, 1e-18));
-  const logs: number[] = new Array(count);
-  logs[count - 1] = logLast;
-  for (let i = count - 2; i >= 0; i--) {
-    const shock = (rand() * 2 - 1) * stepVol;
-    logs[i] = logs[i + 1]! - shock;
-  }
-
-  const candles: Candle[] = [];
-  for (let i = 0; i < count; i++) {
-    const open = Math.exp(logs[i]!);
-    const close = i === count - 1 ? last : Math.exp(logs[i + 1]!);
-    const wick = Math.abs(close - open) * (0.35 + rand() * 1.4) + open * stepVol * (0.15 + rand());
-    const high = Math.max(open, close) + wick * rand();
-    const low = Math.max(1e-18, Math.min(open, close) - wick * rand());
-    const volume = (0.35 + rand()) * (Math.abs(close - open) / Math.max(open, 1e-12) + 0.002) * 50_000;
-    candles.push({
-      time: end - (count - 1 - i) * interval,
-      open,
-      high,
-      low,
-      close,
-      volume,
-    });
-  }
-  return candles;
+  return [{ time: end, open: last, high: last, low: last, close: last, volume: 0 }];
 }
 
-function ensure(
-  pool: Pool,
-  base: ListedToken,
-  quote: ListedToken,
-  timeframe: Timeframe,
-  last: number,
-): Candle[] {
-  const key = seriesKey(pool.id, timeframe);
+function ensure(poolId: string, timeframe: Timeframe, last: number): Candle[] {
+  const key = seriesKey(poolId, timeframe);
   const all = store();
   let rows = all[key];
   let dirty = false;
   if (!rows?.length) {
-    rows = generate(pool, base, quote, timeframe, last);
+    rows = generate(timeframe, last);
     dirty = true;
   } else {
     const interval = INTERVAL_SEC[timeframe];
@@ -141,7 +79,12 @@ export function nativeCandles(
   if (!base || !quote) return [];
   const last = spotPrice(pool, base.mint, quote.mint, tokens);
   if (last <= 0) return [];
-  return ensure(pool, base, quote, timeframe, last).map((row) => ({ ...row }));
+  return ensure(pool.id, timeframe, last).map((row) => ({ ...row }));
+}
+
+export function candlesForId(id: string, last: number, timeframe: Timeframe): Candle[] {
+  if (last <= 0) return [];
+  return ensure(id, timeframe, last).map((row) => ({ ...row }));
 }
 
 export function applyTradeToSeries(pool: Pool, price: number, quoteVolume: number, timeMs = Date.now()): void {

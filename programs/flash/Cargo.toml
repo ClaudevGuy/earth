@@ -1,0 +1,12 @@
+[package]
+name = "earth-flash"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Earth Flash factory: atomic uncollateralized credit that must be repaid in the same transaction."
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "2.1"
